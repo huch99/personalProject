@@ -8,7 +8,7 @@ import lombok.*;
 
 @Entity
 @Table(name = "tenders")
-@Getter
+@Getter @Setter
 @NoArgsConstructor(access = AccessLevel.PROTECTED) // Lombok: 인자 없는 생성자 (JPA 필수)
 @AllArgsConstructor
 @Builder
@@ -20,6 +20,12 @@ public class Tender {
 	
 	@Column(nullable = false, length = 500)
 	private String tenderTitle;
+	
+	@Column
+	private Long pbcdNo;
+	
+	@Column
+	private String cltrHstrNo;
 	
 	@Column(nullable = false)
     private String organization; // 발주 기관 (예: 한국자산관리공사)

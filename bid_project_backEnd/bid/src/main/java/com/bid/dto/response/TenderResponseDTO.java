@@ -5,16 +5,22 @@ import java.time.LocalDateTime;
 import com.bid.entity.Tender;
 import com.fasterxml.jackson.annotation.JsonFormat;
 
+import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Getter;
+import lombok.NoArgsConstructor;
 import lombok.Setter;
 
 @Getter
 @Setter
 @Builder
+@NoArgsConstructor
+@AllArgsConstructor
 public class TenderResponseDTO {
 	
 	private Long tenderId; // 입찰 고유 ID
+	private Long pbctNo;      // ✅ 추가! PBCT_NO 매핑
+    private String cltrHstrNo;  // ✅ 추가! CLTR_HSTR_NO 매핑
 	private String tenderTitle; // 입찰 공고 제목
 	private String organization; // 발주 기관
 	private String bidNumber; // 입찰 공고 번호
@@ -29,6 +35,8 @@ public class TenderResponseDTO {
     public static TenderResponseDTO from(Tender tender) {
         return TenderResponseDTO.builder()
                 .tenderId(tender.getTenderId())
+                .pbctNo(tender.getPbcdNo())
+                .cltrHstrNo(tender.getCltrHstrNo()) 
                 .tenderTitle(tender.getTenderTitle())
                 .organization(tender.getOrganization())
                 .bidNumber(tender.getBidNumber())

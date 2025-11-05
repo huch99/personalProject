@@ -1,12 +1,17 @@
 package com.bid.service;
 
+import java.io.StringReader;
 import java.net.URI;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.time.format.DateTimeParseException;
-import java.util.Collections;
+import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
-import java.util.stream.Collectors;
+import java.util.Map;
+
+import javax.xml.parsers.DocumentBuilder;
+import javax.xml.parsers.DocumentBuilderFactory;
 
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.ResponseEntity;
@@ -14,14 +19,13 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.client.RestTemplate;
 import org.springframework.web.util.UriComponentsBuilder;
-
-import com.bid.dto.OnbidBody;
+import org.w3c.dom.Document;
+import org.w3c.dom.Element;
+import org.w3c.dom.Node;
+import org.w3c.dom.NodeList;
+import org.xml.sax.InputSource;
 import com.bid.dto.OnbidItem;
-import com.bid.dto.OnbidResponseDTO;
 import com.bid.dto.response.TenderResponseDTO;
-import com.bid.entity.Tender;
-import com.bid.repository.TenderRepository;
-
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 
@@ -39,66 +43,59 @@ public class TenderService {
 	@Value("${onbid.api.service-key}")
 	private String onbidApiServiceKey;
 
-	/**
-	 * 모든 입찰 정보를 온비드 공공 API에서 조회하여 DTO 리스트로 반환합니다. Huch님의 프론트엔드 HomePage에 표시될 데이터를
-	 * 제공합니다.
-	 */
 	public List<TenderResponseDTO> getAllTenders() {
-		// 1. 온비드 API 호출을 위한 URI 구성
-		URI uri = UriComponentsBuilder.fromUriString(onbidApiBaseUrl)
-				.queryParam("serviceKey", onbidApiServiceKey).queryParam("pageNo", 1) // 페이지 번호
-				.queryParam("numOfRows", 10) // 한 페이지당 결과 수
-				.queryParam("DPSL_MTD_CD", "0001").encode() // URI 인코딩
-				.build().toUri();
+		long startTime = System.currentTimeMillis();
+        // 1. 온비드 API 호출을 위한 URI 구성
+        URI uri = UriComponentsBuilder.fromUriString(onbidApiBaseUrl)
+                .queryParam("serviceKey", onbidApiServiceKey)
+                .queryParam("pageNo", 1) 
+                .queryParam("numOfRows", 10) 
+                .queryParam("DPSL_MTD_CD", "0001")
+                .queryParam("sort", "PBCT_BEGN_DTM") // 예를 들어 공고 시작일 기준
+                .queryParam("order", "DESC") // 내림차순 (최신순)
+                .encode()
+                .build().toUri();
 
-		log.info("Calling Onbid API: {}", uri); // 호출할 URI 로깅
+        log.info("Calling Onbid API: {}", uri); 
 
-		try {
-			
-			// 2. RestTemplate을 사용하여 온비드 API 호출
-			ResponseEntity<OnbidResponseDTO> responseEntity = restTemplate.getForEntity(uri, OnbidResponseDTO.class);
-			OnbidResponseDTO onbidResponseDTO = responseEntity.getBody();
-			
-			// 3. 응답 처리 및 데이터 추출
-			if (responseEntity.getStatusCode().is2xxSuccessful() && onbidResponseDTO != null) {
+        try {
+        	long apiCallStartTime = System.currentTimeMillis();
+        	
+            ResponseEntity<String> responseEntity = restTemplate.getForEntity(uri, String.class);
+            
+            long apiCallEndTime = System.currentTimeMillis();
+            log.info("온비드 API 응답 수신 시간: {}ms", (apiCallEndTime - apiCallStartTime));
+            
+            // ✅ 3. 응답 처리 및 XML 데이터 파싱
+            if (responseEntity.getStatusCode().is2xxSuccessful() && responseEntity.getBody() != null) {
+                String rawXmlResponse = responseEntity.getBody();
+                long xmlParsingStartTime = System.currentTimeMillis();
+                log.info("Onbid API Raw XML Response: {}", rawXmlResponse); // 실제 XML 응답 로그
 
-				if (onbidResponseDTO.getHeader() != null && "00".equals(onbidResponseDTO.getHeader().getResultCode())) {
-					
-					OnbidBody onbidBody = onbidResponseDTO.getBody();
-					if (onbidBody != null && onbidBody.getItems() != null && !onbidBody.getItems().isEmpty()) {
+                List<TenderResponseDTO> dtoList = parseXmlToTenderDtos(rawXmlResponse);
+                long xmlParsingEndTime = System.currentTimeMillis();
+                log.info("XML 파싱 및 DTO 매핑 시간: {}ms", (xmlParsingEndTime - xmlParsingStartTime));
+                
+                if (dtoList.isEmpty()) {
+                    log.warn("Onbid API 응답을 파싱했지만 DTO 리스트가 비어 있습니다.");
+                }
+                return dtoList;
+            } else {
+                String statusCode = responseEntity.getStatusCode().toString();
+                String errorMessage = String.format("Onbid API 호출 실패: HTTP Status %s, Response Body: %s", 
+                                                    statusCode, responseEntity.getBody());
+                log.error(errorMessage);
+                throw new RuntimeException(errorMessage);
+            }
+        } catch (Exception e) {
+            log.error("Onbid API 호출 중 예외 발생: {}", e.getMessage(), e);
+            throw new RuntimeException("온비드 입찰 정보를 불러오는데 실패했습니다.", e);
+        } finally {
+        	long endTime = System.currentTimeMillis();
+            log.info("getAllTenders 메서드 총 실행 시간: {}ms", (endTime - startTime));
+        }
+    }
 
-						List<OnbidItem> onbidItems = onbidBody.getItems(); // 👈 items를 직접 가져옴
-
-						return onbidItems.stream().map(this::mapOnbidItemToTenderResponseDTO)
-								.collect(Collectors.toList());
-					} else {
-						log.warn("Onbid API 응답에 items가 없거나 비어 있습니다: {}", onbidBody);
-						return Collections.emptyList();
-					}
-
-				} else {
-					String resultMsg = (onbidResponseDTO.getHeader() != null && onbidResponseDTO.getHeader().getResultMsg() != null) ? onbidResponseDTO.getHeader().getResultMsg()
-							: "Unknown error message from Onbid API response header";
-					throw new RuntimeException("온비드 API 오류 응답: " + resultMsg);
-				}
-			} else {
-				String statusCode = responseEntity.getStatusCode().toString();
-				String resultMsg = (onbidResponseDTO != null && onbidResponseDTO.getHeader() != null && onbidResponseDTO.getHeader().getResultMsg() != null) ? onbidResponseDTO.getHeader().getResultMsg()
-						: "No specific error message from Onbid API or response body is null";
-				String errorMessage = String.format("Onbid API 호출 실패: %s - %s", statusCode, resultMsg);
-				log.error(errorMessage);
-				throw new RuntimeException(errorMessage);
-			}
-		} catch (Exception e) {
-			log.error("Onbid API 호출 중 예외 발생: {}", e.getMessage(), e);
-			throw new RuntimeException("온비드 입찰 정보를 불러오는데 실패했습니다.", e);
-		}
-	}
-
-	/**
-	 * OnbidItem을 TenderResponseDto로 변환하는 매핑 로직 실제 온비드 API 응답 필드와 TenderResponseDto
-	 * 필드명을 정확히 매핑해야 합니다.
-	 */
 	private TenderResponseDTO mapOnbidItemToTenderResponseDTO(OnbidItem onbidItem) {
 		// 공고일/마감일이 String으로 오는 경우, 파싱 로직 필요
 		LocalDateTime announcementDate = parseDateTime(onbidItem.getPBCT_BEGN_DTM());
@@ -141,4 +138,157 @@ public class TenderService {
 			return (long) bidNo.hashCode(); // 단순 예시. 실제 고유성을 보장하려면 다른 방법 모색
 		}
 	}
+
+	public List<TenderResponseDTO> parseXmlToTenderDtos(String xmlString) {
+		List<TenderResponseDTO> dtoList = new ArrayList<>();
+
+		List<Map<String, String>> parsedItems = performXmlParsing(xmlString);
+
+		for (Map<String, String> itemData : parsedItems) {
+			TenderResponseDTO dto = new TenderResponseDTO();
+
+			// --- String 값을 Long으로 변환하는 부분 ---
+			String plnmNoStr = itemData.get("PLNM_NO");
+			if (plnmNoStr != null && !plnmNoStr.isEmpty()) {
+				try {
+					dto.setTenderId(Long.parseLong(plnmNoStr));
+				} catch (NumberFormatException e) {
+					System.err.println("PLNM_NO 숫자로 변환 실패: " + plnmNoStr);
+					dto.setTenderId(null);
+				}
+			} else {
+				dto.setTenderId(null);
+			}
+
+			String pbctNoStr = itemData.get("PBCT_NO");
+			if (pbctNoStr != null && !pbctNoStr.isEmpty()) {
+				try {
+					dto.setPbctNo(Long.parseLong(pbctNoStr));
+				} catch (NumberFormatException e) {
+					System.err.println("PBCT_NO 숫자로 변환 실패: " + pbctNoStr);
+					dto.setPbctNo(null);
+				}
+			} else {
+				dto.setPbctNo(null);
+			}
+
+			dto.setCltrHstrNo(itemData.get("CLTR_HSTR_NO")); // String 타입은 변환 필요 없음
+
+			dto.setTenderTitle(itemData.get("CLTR_NM"));
+			dto.setOrganization(itemData.get("DPSL_MTD_NM"));
+			dto.setBidNumber(itemData.get("BID_MNMT_NO"));
+
+			// 날짜 변환 로직 (LocalDateTime)
+			String pbctBegnDtm = itemData.get("PBCT_BEGN_DTM");
+			if (pbctBegnDtm != null && pbctBegnDtm.length() == 14) {
+				try {
+					dto.setAnnouncementDate(
+							LocalDateTime.parse(pbctBegnDtm, DateTimeFormatter.ofPattern("yyyyMMddHHmmss")));
+				} catch (Exception e) {
+					System.err.println("공고일 날짜 변환 오류: " + pbctBegnDtm);
+					dto.setAnnouncementDate(null);
+				}
+			}
+
+			String pbctClsDtm = itemData.get("PBCT_CLS_DTM");
+			if (pbctClsDtm != null && pbctClsDtm.length() == 14) {
+				try {
+					dto.setDeadline(LocalDateTime.parse(pbctClsDtm, DateTimeFormatter.ofPattern("yyyyMMddHHmmss")));
+				} catch (Exception e) {
+					System.err.println("마감일 날짜 변환 오류: " + pbctClsDtm);
+					dto.setDeadline(null);
+				}
+			}
+
+			dtoList.add(dto);
+		}
+		return dtoList;
+	}
+
+	private List<Map<String, String>> performXmlParsing(String xmlString) {
+		List<Map<String, String>> parsedItems = new ArrayList<>();
+
+		try {
+			DocumentBuilderFactory dbFactory = DocumentBuilderFactory.newInstance();
+			DocumentBuilder dBuilder = dbFactory.newDocumentBuilder();
+			InputSource is = new InputSource(new StringReader(xmlString));
+			Document doc = dBuilder.parse(is);
+			doc.getDocumentElement().normalize();
+
+			NodeList itemNodes = doc.getElementsByTagName("item");
+
+			for (int i = 0; i < itemNodes.getLength(); i++) {
+				Node itemNode = itemNodes.item(i);
+
+				if (itemNode.getNodeType() == Node.ELEMENT_NODE) {
+					Element itemElement = (Element) itemNode;
+					Map<String, String> itemMap = new HashMap<>();
+
+					// Huch님의 XML 데이터에서 필요한 모든 태그의 값을 추출하여 itemMap에 추가합니다.
+					// 모든 태그 이름에 대해 getTagValue를 호출하고 map에 put 합니다.
+					itemMap.put("RNUM", getTagValue("RNUM", itemElement));
+					itemMap.put("PLNM_NO", getTagValue("PLNM_NO", itemElement));
+					itemMap.put("PBCT_NO", getTagValue("PBCT_NO", itemElement));
+					itemMap.put("PBCT_CDTN_NO", getTagValue("PBCT_CDTN_NO", itemElement));
+					itemMap.put("CLTR_NO", getTagValue("CLTR_NO", itemElement));
+					itemMap.put("CLTR_HSTR_NO", getTagValue("CLTR_HSTR_NO", itemElement));
+					itemMap.put("SCRN_GRP_CD", getTagValue("SCRN_GRP_CD", itemElement));
+					itemMap.put("CTGR_FULL_NM", getTagValue("CTGR_FULL_NM", itemElement));
+					itemMap.put("BID_MNMT_NO", getTagValue("BID_MNMT_NO", itemElement));
+					itemMap.put("CLTR_NM", getTagValue("CLTR_NM", itemElement));
+					itemMap.put("CLTR_MNMT_NO", getTagValue("CLTR_MNMT_NO", itemElement));
+					itemMap.put("LDNM_ADRS", getTagValue("LDNM_ADRS", itemElement));
+					itemMap.put("NMRD_ADRS", getTagValue("NMRD_ADRS", itemElement));
+					itemMap.put("LDNM_PNU", getTagValue("LDNM_PNU", itemElement));
+					itemMap.put("DPSL_MTD_CD", getTagValue("DPSL_MTD_CD", itemElement));
+					itemMap.put("DPSL_MTD_NM", getTagValue("DPSL_MTD_NM", itemElement));
+					itemMap.put("BID_MTD_NM", getTagValue("BID_MTD_NM", itemElement));
+					itemMap.put("MIN_BID_PRC", getTagValue("MIN_BID_PRC", itemElement));
+					itemMap.put("APSL_ASES_AVG_AMT", getTagValue("APSL_ASES_AVG_AMT", itemElement));
+					itemMap.put("FEE_RATE", getTagValue("FEE_RATE", itemElement));
+					itemMap.put("PBCT_BEGN_DTM", getTagValue("PBCT_BEGN_DTM", itemElement));
+					itemMap.put("PBCT_CLS_DTM", getTagValue("PBCT_CLS_DTM", itemElement));
+					itemMap.put("PBCT_CLTR_STAT_NM", getTagValue("PBCT_CLTR_STAT_NM", itemElement));
+					itemMap.put("USCBD_CNT", getTagValue("USCBD_CNT", itemElement));
+					itemMap.put("IQRY_CNT", getTagValue("IQRY_CNT", itemElement));
+					itemMap.put("GOODS_NM", getTagValue("GOODS_NM", itemElement));
+					itemMap.put("MANF", getTagValue("MANF", itemElement));
+					itemMap.put("MDL", getTagValue("MDL", itemElement));
+					itemMap.put("NRGT", getTagValue("NRGT", itemElement));
+					itemMap.put("GRBX", getTagValue("GRBX", itemElement));
+					itemMap.put("ENDPC", getTagValue("ENDPC", itemElement));
+					itemMap.put("VHCL_MLGE", getTagValue("VHCL_MLGE", itemElement));
+					itemMap.put("FUEL", getTagValue("FUEL", itemElement));
+					itemMap.put("SCRT_NM", getTagValue("SCRT_NM", itemElement));
+					itemMap.put("TPBZ", getTagValue("TPBZ", itemElement));
+					itemMap.put("ITM_NM", getTagValue("ITM_NM", itemElement));
+					itemMap.put("MMB_RGT_NM", getTagValue("MMB_RGT_NM", itemElement));
+					itemMap.put("CLTR_IMG_FILES", getTagValue("CLTR_IMG_FILES", itemElement));
+
+					parsedItems.add(itemMap);
+				}
+			}
+
+		} catch (Exception e) {
+			System.err.println("XML 파싱 중 오류 발생: " + e.getMessage());
+			e.printStackTrace();
+		}
+		return parsedItems;
+	}
+
+	private String getTagValue(String tag, Element element) {
+		NodeList nl = element.getElementsByTagName(tag);
+		if (nl != null && nl.getLength() > 0) {
+			Node node = nl.item(0);
+			if (node.getNodeType() == Node.ELEMENT_NODE) {
+				Element innerElement = (Element) node;
+				NodeList childNodes = innerElement.getChildNodes();
+				if (childNodes != null && childNodes.getLength() > 0) {
+					return childNodes.item(0).getNodeValue();
+				}
+			}
+		}
+		return null;
+	}
+
 }

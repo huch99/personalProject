@@ -19,30 +19,6 @@ public class LoginController {
 
 	private final LoginService loginService;
 
-	/**
-	 * 회원가입 엔드포인트
-	 * 
-	 * @param signupRequestDTO 회원가입 요청 데이터
-	 * @return 성공 메시지 또는 오류 응답
-	 */
-	@PostMapping("/signup")
-	public ResponseEntity<String> registerUser(@RequestBody SignupRequestDTO signupRequestDTO) {
-		log.info("회원가입 요청: {}", signupRequestDTO.getUsername());
-		try {
-			loginService.registerUser(signupRequestDTO);
-			return new ResponseEntity<>("회원가입이 성공적으로 완료되었습니다.", HttpStatus.CREATED);
-		} catch (RuntimeException e) {
-			log.error("회원가입 실패: {}", e.getMessage());
-			return new ResponseEntity<>(e.getMessage(), HttpStatus.BAD_REQUEST);
-		}
-	}
-
-	/**
-	 * 로그인 엔드포인트
-	 * 
-	 * @param loginRequestDTO 로그인 요청 데이터
-	 * @return 로그인 성공 시 JWT 토큰 및 사용자 정보 (LoginResponseDTO)
-	 */
 	@PostMapping
 	public ResponseEntity<LoginResponseDTO> authenticateUser(@RequestBody LoginResponseDTO loginRequestDTO) {
 		log.info("로그인 요청: {}", loginRequestDTO.getUsername());

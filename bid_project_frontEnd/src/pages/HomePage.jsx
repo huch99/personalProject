@@ -148,37 +148,31 @@ const HomePage = () => {
   const error = useSelector((state) => state.tenders.error);
 
   useEffect(() => {
-    try {
-      console.log('try fetchTenders');
-
-      dispatch(fetchTenders());
-
-      console.log('dispatch 완료');
-    } catch (error) {
-      console.log(error.message);
-    }
-
-  }, [status, dispatch]);
+    dispatch(fetchTenders());
+  }, [dispatch]);
 
   let content;
 
   if (status === 'loading') {
     content = <S_LoadingText>입찰 정보를 불러오는 중입니다...</S_LoadingText>;
-  } else if (status === 'succeded') {
+  } else if (status === 'succeeded') {
     if (bids.length > 0) {
       content = (
         <S_BidGrid>
-          {bids.map((bid) => (
-            <S_BidItemCard key={bid.id} to={`/tenders/${bid.id}`}>
-              <S_BidTitle>{bid.title}</S_BidTitle>
+          {bids.map((bid, index) => (
+            <S_BidItemCard key={bid.pbctNo + '-' + index} to={`/tenders/${bid.pbctNo}`}>
+              <S_BidTitle>{bid.tenderTitle}</S_BidTitle>
               <S_BidMeta>
                 <strong>마감일 : </strong> {bid.deadline}
               </S_BidMeta>
               <S_BidMeta>
-                <strong>발주처 : </strong> {bid.organization}
+                <strong>처분 방식 : </strong> {bid.organization}
               </S_BidMeta>
               <S_BidMeta>
-                <strong>공고 번호 : </strong> {bid.bidNumber}
+                <strong>공고 번호 : </strong> {bid.pbctNo}
+              </S_BidMeta>
+              <S_BidMeta>
+                <strong>공고일 : </strong> {bid.announcementDate}
               </S_BidMeta>
             </S_BidItemCard>
           ))}
@@ -193,7 +187,7 @@ const HomePage = () => {
 
   return (
     <S_HomePageContainer>
-      <S_HeroSection>
+      {/* <S_HeroSection>
         <S_HeroTitle>KAMCO 입찰 정보, 빠르고 정확하게!</S_HeroTitle>
         <S_HeroDescription>
           국내 공공 입찰 정보를 한눈에 확인하고,
@@ -201,10 +195,10 @@ const HomePage = () => {
           간편하게 나에게 맞는 입찰을 찾아보세요.
         </S_HeroDescription>
         <S_CtaGroup>
-          <S_CtaButton to="/login">로그인</S_CtaButton>
+          <S_CtaButton to="#">로그인</S_CtaButton>
           <S_CtaButton to="/signup">회원가입</S_CtaButton>
         </S_CtaGroup>
-      </S_HeroSection>
+      </S_HeroSection> */}
 
       <S_BidListSection>
         <S_SectionTitle>최신 입찰 공고</S_SectionTitle>

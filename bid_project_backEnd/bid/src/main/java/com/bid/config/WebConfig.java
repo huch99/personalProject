@@ -1,6 +1,9 @@
 package com.bid.config;
 
+import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
+import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.web.servlet.config.annotation.CorsRegistry;
 import org.springframework.web.servlet.config.annotation.WebMvcConfigurer;
 
@@ -16,4 +19,5 @@ public class WebConfig implements WebMvcConfigurer {
 				.allowCredentials(true) // 자격 증명 (쿠리, HTTP 인증 등) 허용
 				.maxAge(3600); // Preflight 요청 결과 캐싱 시간 (초)
 	}
+	
 }
