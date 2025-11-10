@@ -105,7 +105,7 @@ const SideBar = ({ isOpen, onClose }) => {
           <ul>
             <li><Link to="/" onClick={onClose}>🏡 홈</Link></li> {/* ✅ onClose 추가: 클릭 시 사이드바 닫힘 */}
             <li><Link to="/tenders" onClick={onClose}>📝 입찰 목록</Link></li>
-            <li><Link to="/advanced-search" onClick={onClose}>🔎 고급 검색</Link></li>
+            <li><Link to="/search" onClick={onClose}>🔎 고급 검색</Link></li>
             <li><Link to="/mypage" onClick={onClose}>👤 마이페이지</Link></li>
             <li><Link to="/faq" onClick={onClose}>❓ FAQ</Link></li>
           </ul>

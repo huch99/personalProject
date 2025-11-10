@@ -21,6 +21,7 @@ public class TenderResponseDTO {
 	private Long tenderId; // 입찰 고유 ID
 	private Long pbctNo;      // ✅ 추가! PBCT_NO 매핑
     private String cltrHstrNo;  // ✅ 추가! CLTR_HSTR_NO 매핑
+    private String cltrMnmtNo; 
 	private String tenderTitle; // 입찰 공고 제목
 	private String organization; // 발주 기관
 	private String bidNumber; // 입찰 공고 번호
@@ -37,6 +38,7 @@ public class TenderResponseDTO {
                 .tenderId(tender.getTenderId())
                 .pbctNo(tender.getPbcdNo())
                 .cltrHstrNo(tender.getCltrHstrNo()) 
+                .cltrMnmtNo(tender.getCltrMnmtNo())
                 .tenderTitle(tender.getTenderTitle())
                 .organization(tender.getOrganization())
                 .bidNumber(tender.getBidNumber())

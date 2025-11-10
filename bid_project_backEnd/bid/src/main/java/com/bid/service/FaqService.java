@@ -30,10 +30,10 @@ public class FaqService {
                 .collect(Collectors.toList());
     }
     
-    public FaqResponseDTO getFaqById(Long id) {
-        Faq faq = faqRepository.findById(id)
-                .orElseThrow(() -> new EntityNotFoundException("FAQ를 찾을 수 없습니다. ID: " + id));
-        return mapToDto(faq);
+    public FaqResponseDTO getFaqById(Long faqId) {
+        Faq faq = faqRepository.findById(faqId)
+                .orElseThrow(() -> new EntityNotFoundException("FAQ를 찾을 수 없습니다. ID: " + faqId));
+        return FaqResponseDTO.from(faq);
     }
     
     @Transactional // 쓰기 작업이므로 트랜잭션 필요

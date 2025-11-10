@@ -35,11 +35,6 @@ public class JwtTokenProvider {
         this.key = Keys.hmacShaKeyFor(jwtProperties.getSecretKey().getBytes());
     }
 
-    /**
-     * JWT Access Token 생성 메서드
-     * @param authentication 현재 인증된 사용자 정보 (Spring Security의 Authentication 객체)
-     * @return 생성된 JWT Access Token
-     */
     public String generateToken(Authentication authentication) {
         String username = authentication.getName(); // UserDetails의 username
         String authorities = authentication.getAuthorities().stream()
@@ -58,11 +53,6 @@ public class JwtTokenProvider {
                 .compact(); // JWT를 문자열로 직렬화
     }
     
-    /**
-     * JWT Access Token 생성 메서드 (UserDetails 사용) - 주로 Refresh Token 재발급 시 사용
-     * @param userDetails 사용자 상세 정보 (UserDetailsService에서 로드한 UserDetails 객체)
-     * @return 생성된 JWT Access Token
-     */
     public String generateToken(UserDetails userDetails) {
         String username = userDetails.getUsername();
         String authorities = userDetails.getAuthorities().stream()
@@ -81,12 +71,6 @@ public class JwtTokenProvider {
                 .compact();
     }
 
-
-    /**
-     * JWT에서 사용자 이름(subject) 추출 메서드
-     * @param token JWT Access Token
-     * @return 토큰에 담긴 사용자 이름
-     */
     public String getUsernameFromJWT(String token) {
         Claims claims = Jwts.parserBuilder()
                 .setSigningKey(key) // 서명 검증을 위한 비밀 키
@@ -97,11 +81,6 @@ public class JwtTokenProvider {
         return claims.getSubject(); // subject 클레임 반환
     }
 
-    /**
-     * JWT 토큰 유효성 검사 메서드
-     * @param authToken 검사할 JWT Access Token
-     * @return 토큰이 유효하면 true, 아니면 false
-     */
     public boolean validateToken(String authToken) {
         try {
             Jwts.parserBuilder().setSigningKey(key).build().parseClaimsJws(authToken);
@@ -117,12 +96,7 @@ public class JwtTokenProvider {
         }
         return false;
     }
-    
-    /**
-     * JWT에서 권한(Roles) 추출 메서드 (Spring Security Authentication 객체 생성을 위함)
-     * @param token JWT Access Token
-     * @return 사용자 권한 컬렉션
-     */
+
     public Collection<? extends GrantedAuthority> getAuthorities(String token) {
         Claims claims = Jwts.parserBuilder()
                 .setSigningKey(key)

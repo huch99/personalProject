@@ -47,7 +47,7 @@ public class SecurityConfig {
 	public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
 		http.csrf(csrf -> csrf.disable()) // CSRF 보호 기능을 비활성화합니다.
 				.sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS) 
-				).authorizeHttpRequests(authorize -> authorize.requestMatchers("/api/**", "/login", "/signup")
+				).authorizeHttpRequests(authorize -> authorize.requestMatchers("/api/**", "/login", "/signup", "/faq")
 						.permitAll().anyRequest().authenticated());
 
 		http.addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class); // 예시

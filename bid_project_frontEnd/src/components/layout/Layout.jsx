@@ -45,12 +45,12 @@ const Layout = ({ children }) => {
 
   const handleToggleSidebar = () => {
     setIsSidebarOpen(!isSidebarOpen);
-    console.log("Sidebar Toggled in Layout. Current state:", !isSidebarOpen); // 디버깅 로그
+    // console.log("Sidebar Toggled in Layout. Current state:", !isSidebarOpen); // 디버깅 로그
   };
 
   const handleCloseSidebar = () => {
     setIsSidebarOpen(false);
-    console.log("Sidebar Closed in Layout"); // 디버깅 로그
+    // console.log("Sidebar Closed in Layout"); // 디버깅 로그
   };
 
   return (

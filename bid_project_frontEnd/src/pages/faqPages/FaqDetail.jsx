@@ -77,12 +77,16 @@ const BackToListButton = styled.button`
 const FaqDetail = () => {
     const { faqId } = useParams();
     const navigate = useNavigate();
+    const isLoggedIn = useSelector(state => state.login.isLoggedIn);
+    const currentUserId = useSelector(state => state.login.userId);
+    const usernameFromStore = useSelector(state => state.login.username);
+    
+
     const [faq, setFaq] = useState(null);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState(null);
 
-    const isLoggedIn = useSelector(state => state.login.isLoggedIn);
-    const currentUserId = useSelector(state => state.login.userId);
+       
 
     useEffect(() => {
         // 로그인 체크 (프론트엔드 라우팅 보호 외에, 컴포넌트 내에서도 확인)
@@ -101,6 +105,7 @@ const FaqDetail = () => {
                         'Content-Type': 'application/json'
                     }
                 });
+
                 if (response.status === 401 || response.status === 403) {
                     alert('게시글을 조회할 권한이 없거나, 로그인이 필요합니다.');
                     navigate('/login');
@@ -126,14 +131,15 @@ const FaqDetail = () => {
     if (error) return <FaqDetailContainer><p>오류 발생: {error}</p></FaqDetailContainer>;
     if (!faq) return <FaqDetailContainer><p>게시글을 찾을 수 없습니다.</p></FaqDetailContainer>;
 
-    const isAuthor = faq.authorUsername === useSelector(state => state.login.username);
 
+    const isAuthor = faq.authorUsername === usernameFromStore; 
+    
     const handleDelete = async () => {
         if (!window.confirm('정말로 이 게시글을 삭제하시겠습니까?')) return;
 
         try {
             const accessToken = localStorage.getItem('accessToken');
-            const response = await fetch(`/api/faq/${faqId}`, {
+            const response = await fetch(`http://localhost:8080/api/faq/${faqId}`, {
                 method: 'DELETE',
                 headers: {
                     'Authorization': `Bearer ${accessToken}`
@@ -157,7 +163,7 @@ const FaqDetail = () => {
     };
 
     const handleEdit = () => {
-        navigate(`/faq/edit/${faqId}`); // 수정 페이지로 이동
+        navigate(`/faq/${faqId}/edit`); // 수정 페이지로 이동
     };
 
     return (

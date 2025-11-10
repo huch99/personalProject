@@ -6,9 +6,11 @@ import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.time.format.DateTimeParseException;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.UUID;
 
 import javax.xml.parsers.DocumentBuilder;
 import javax.xml.parsers.DocumentBuilderFactory;
@@ -25,8 +27,13 @@ import org.w3c.dom.Node;
 import org.w3c.dom.NodeList;
 import org.xml.sax.InputSource;
 import com.bid.dto.OnbidItem;
+import com.bid.dto.response.PagedTenderResponse;
 import com.bid.dto.response.TenderResponseDTO;
+
+import lombok.AllArgsConstructor;
+import lombok.Getter;
 import lombok.RequiredArgsConstructor;
+import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
 
 @Service
@@ -43,58 +50,42 @@ public class TenderService {
 	@Value("${onbid.api.service-key}")
 	private String onbidApiServiceKey;
 
+	private static final DateTimeFormatter ONBID_DATE_TIME_FORMATTER = DateTimeFormatter.ofPattern("yyyyMMddHHmmss");
+
 	public List<TenderResponseDTO> getAllTenders() {
-		long startTime = System.currentTimeMillis();
-        // 1. 온비드 API 호출을 위한 URI 구성
-        URI uri = UriComponentsBuilder.fromUriString(onbidApiBaseUrl)
-                .queryParam("serviceKey", onbidApiServiceKey)
-                .queryParam("pageNo", 1) 
-                .queryParam("numOfRows", 10) 
-                .queryParam("DPSL_MTD_CD", "0001")
-                .queryParam("sort", "PBCT_BEGN_DTM") // 예를 들어 공고 시작일 기준
-                .queryParam("order", "DESC") // 내림차순 (최신순)
-                .encode()
-                .build().toUri();
+		// 1. 온비드 API 호출을 위한 URI 구성
+		URI uri = UriComponentsBuilder.fromUriString(onbidApiBaseUrl).queryParam("serviceKey", onbidApiServiceKey)
+				.queryParam("pageNo", 1).queryParam("numOfRows", 100).queryParam("DPSL_MTD_CD", "0001")
+				.queryParam("sort", "PBCT_BEGN_DTM") // 예를 들어 공고 시작일 기준
+				.encode().build().toUri();
 
-        log.info("Calling Onbid API: {}", uri); 
+		try {
+			ResponseEntity<String> responseEntity = restTemplate.getForEntity(uri, String.class);
 
-        try {
-        	long apiCallStartTime = System.currentTimeMillis();
-        	
-            ResponseEntity<String> responseEntity = restTemplate.getForEntity(uri, String.class);
-            
-            long apiCallEndTime = System.currentTimeMillis();
-            log.info("온비드 API 응답 수신 시간: {}ms", (apiCallEndTime - apiCallStartTime));
-            
-            // ✅ 3. 응답 처리 및 XML 데이터 파싱
-            if (responseEntity.getStatusCode().is2xxSuccessful() && responseEntity.getBody() != null) {
-                String rawXmlResponse = responseEntity.getBody();
-                long xmlParsingStartTime = System.currentTimeMillis();
-                log.info("Onbid API Raw XML Response: {}", rawXmlResponse); // 실제 XML 응답 로그
+			// ✅ 3. 응답 처리 및 XML 데이터 파싱
+			if (responseEntity.getStatusCode().is2xxSuccessful() && responseEntity.getBody() != null) {
+				String rawXmlResponse = responseEntity.getBody();
 
-                List<TenderResponseDTO> dtoList = parseXmlToTenderDtos(rawXmlResponse);
-                long xmlParsingEndTime = System.currentTimeMillis();
-                log.info("XML 파싱 및 DTO 매핑 시간: {}ms", (xmlParsingEndTime - xmlParsingStartTime));
-                
-                if (dtoList.isEmpty()) {
-                    log.warn("Onbid API 응답을 파싱했지만 DTO 리스트가 비어 있습니다.");
-                }
-                return dtoList;
-            } else {
-                String statusCode = responseEntity.getStatusCode().toString();
-                String errorMessage = String.format("Onbid API 호출 실패: HTTP Status %s, Response Body: %s", 
-                                                    statusCode, responseEntity.getBody());
-                log.error(errorMessage);
-                throw new RuntimeException(errorMessage);
-            }
-        } catch (Exception e) {
-            log.error("Onbid API 호출 중 예외 발생: {}", e.getMessage(), e);
-            throw new RuntimeException("온비드 입찰 정보를 불러오는데 실패했습니다.", e);
-        } finally {
-        	long endTime = System.currentTimeMillis();
-            log.info("getAllTenders 메서드 총 실행 시간: {}ms", (endTime - startTime));
-        }
-    }
+				List<TenderResponseDTO> dtoList = parseXmlToTenderDtos(rawXmlResponse);
+
+				List<TenderResponseDTO> filteredList = filterDuplicateTenders(dtoList);
+
+				if (filteredList.isEmpty()) {
+					log.warn("Onbid API 응답을 파싱하고 필터링했지만 DTO 리스트가 비어 있습니다.");
+				}
+				return filteredList;
+			} else {
+				String statusCode = responseEntity.getStatusCode().toString();
+				String errorMessage = String.format("Onbid API 호출 실패: HTTP Status %s, Response Body: %s", statusCode,
+						responseEntity.getBody());
+				log.error(errorMessage);
+				throw new RuntimeException(errorMessage);
+			}
+		} catch (Exception e) {
+			log.error("Onbid API 호출 중 예외 발생: {}", e.getMessage(), e);
+			throw new RuntimeException("온비드 입찰 정보를 불러오는데 실패했습니다.", e);
+		}
+	}
 
 	private TenderResponseDTO mapOnbidItemToTenderResponseDTO(OnbidItem onbidItem) {
 		// 공고일/마감일이 String으로 오는 경우, 파싱 로직 필요
@@ -142,138 +133,50 @@ public class TenderService {
 	public List<TenderResponseDTO> parseXmlToTenderDtos(String xmlString) {
 		List<TenderResponseDTO> dtoList = new ArrayList<>();
 
-		List<Map<String, String>> parsedItems = performXmlParsing(xmlString);
-
-		for (Map<String, String> itemData : parsedItems) {
-			TenderResponseDTO dto = new TenderResponseDTO();
-
-			// --- String 값을 Long으로 변환하는 부분 ---
-			String plnmNoStr = itemData.get("PLNM_NO");
-			if (plnmNoStr != null && !plnmNoStr.isEmpty()) {
-				try {
-					dto.setTenderId(Long.parseLong(plnmNoStr));
-				} catch (NumberFormatException e) {
-					System.err.println("PLNM_NO 숫자로 변환 실패: " + plnmNoStr);
-					dto.setTenderId(null);
-				}
-			} else {
-				dto.setTenderId(null);
-			}
-
-			String pbctNoStr = itemData.get("PBCT_NO");
-			if (pbctNoStr != null && !pbctNoStr.isEmpty()) {
-				try {
-					dto.setPbctNo(Long.parseLong(pbctNoStr));
-				} catch (NumberFormatException e) {
-					System.err.println("PBCT_NO 숫자로 변환 실패: " + pbctNoStr);
-					dto.setPbctNo(null);
-				}
-			} else {
-				dto.setPbctNo(null);
-			}
-
-			dto.setCltrHstrNo(itemData.get("CLTR_HSTR_NO")); // String 타입은 변환 필요 없음
-
-			dto.setTenderTitle(itemData.get("CLTR_NM"));
-			dto.setOrganization(itemData.get("DPSL_MTD_NM"));
-			dto.setBidNumber(itemData.get("BID_MNMT_NO"));
-
-			// 날짜 변환 로직 (LocalDateTime)
-			String pbctBegnDtm = itemData.get("PBCT_BEGN_DTM");
-			if (pbctBegnDtm != null && pbctBegnDtm.length() == 14) {
-				try {
-					dto.setAnnouncementDate(
-							LocalDateTime.parse(pbctBegnDtm, DateTimeFormatter.ofPattern("yyyyMMddHHmmss")));
-				} catch (Exception e) {
-					System.err.println("공고일 날짜 변환 오류: " + pbctBegnDtm);
-					dto.setAnnouncementDate(null);
-				}
-			}
-
-			String pbctClsDtm = itemData.get("PBCT_CLS_DTM");
-			if (pbctClsDtm != null && pbctClsDtm.length() == 14) {
-				try {
-					dto.setDeadline(LocalDateTime.parse(pbctClsDtm, DateTimeFormatter.ofPattern("yyyyMMddHHmmss")));
-				} catch (Exception e) {
-					System.err.println("마감일 날짜 변환 오류: " + pbctClsDtm);
-					dto.setDeadline(null);
-				}
-			}
-
-			dtoList.add(dto);
-		}
-		return dtoList;
-	}
-
-	private List<Map<String, String>> performXmlParsing(String xmlString) {
-		List<Map<String, String>> parsedItems = new ArrayList<>();
-
 		try {
-			DocumentBuilderFactory dbFactory = DocumentBuilderFactory.newInstance();
-			DocumentBuilder dBuilder = dbFactory.newDocumentBuilder();
+			DocumentBuilderFactory factory = DocumentBuilderFactory.newInstance();
+			DocumentBuilder builder = factory.newDocumentBuilder();
 			InputSource is = new InputSource(new StringReader(xmlString));
-			Document doc = dBuilder.parse(is);
+			is.setEncoding("UTF-8"); // ✅ 인코딩 문제 발생 시 대비 (기본적으로 UTF-8이겠지만 명시)
+			Document doc = builder.parse(is);
 			doc.getDocumentElement().normalize();
 
-			NodeList itemNodes = doc.getElementsByTagName("item");
+			NodeList itemList = doc.getElementsByTagName("item"); // XML 응답에서 <item> 태그를 찾습니다.
 
-			for (int i = 0; i < itemNodes.getLength(); i++) {
-				Node itemNode = itemNodes.item(i);
-
+			for (int i = 0; i < itemList.getLength(); i++) {
+				Node itemNode = itemList.item(i);
 				if (itemNode.getNodeType() == Node.ELEMENT_NODE) {
-					Element itemElement = (Element) itemNode;
-					Map<String, String> itemMap = new HashMap<>();
+					Element element = (Element) itemNode;
 
-					// Huch님의 XML 데이터에서 필요한 모든 태그의 값을 추출하여 itemMap에 추가합니다.
-					// 모든 태그 이름에 대해 getTagValue를 호출하고 map에 put 합니다.
-					itemMap.put("RNUM", getTagValue("RNUM", itemElement));
-					itemMap.put("PLNM_NO", getTagValue("PLNM_NO", itemElement));
-					itemMap.put("PBCT_NO", getTagValue("PBCT_NO", itemElement));
-					itemMap.put("PBCT_CDTN_NO", getTagValue("PBCT_CDTN_NO", itemElement));
-					itemMap.put("CLTR_NO", getTagValue("CLTR_NO", itemElement));
-					itemMap.put("CLTR_HSTR_NO", getTagValue("CLTR_HSTR_NO", itemElement));
-					itemMap.put("SCRN_GRP_CD", getTagValue("SCRN_GRP_CD", itemElement));
-					itemMap.put("CTGR_FULL_NM", getTagValue("CTGR_FULL_NM", itemElement));
-					itemMap.put("BID_MNMT_NO", getTagValue("BID_MNMT_NO", itemElement));
-					itemMap.put("CLTR_NM", getTagValue("CLTR_NM", itemElement));
-					itemMap.put("CLTR_MNMT_NO", getTagValue("CLTR_MNMT_NO", itemElement));
-					itemMap.put("LDNM_ADRS", getTagValue("LDNM_ADRS", itemElement));
-					itemMap.put("NMRD_ADRS", getTagValue("NMRD_ADRS", itemElement));
-					itemMap.put("LDNM_PNU", getTagValue("LDNM_PNU", itemElement));
-					itemMap.put("DPSL_MTD_CD", getTagValue("DPSL_MTD_CD", itemElement));
-					itemMap.put("DPSL_MTD_NM", getTagValue("DPSL_MTD_NM", itemElement));
-					itemMap.put("BID_MTD_NM", getTagValue("BID_MTD_NM", itemElement));
-					itemMap.put("MIN_BID_PRC", getTagValue("MIN_BID_PRC", itemElement));
-					itemMap.put("APSL_ASES_AVG_AMT", getTagValue("APSL_ASES_AVG_AMT", itemElement));
-					itemMap.put("FEE_RATE", getTagValue("FEE_RATE", itemElement));
-					itemMap.put("PBCT_BEGN_DTM", getTagValue("PBCT_BEGN_DTM", itemElement));
-					itemMap.put("PBCT_CLS_DTM", getTagValue("PBCT_CLS_DTM", itemElement));
-					itemMap.put("PBCT_CLTR_STAT_NM", getTagValue("PBCT_CLTR_STAT_NM", itemElement));
-					itemMap.put("USCBD_CNT", getTagValue("USCBD_CNT", itemElement));
-					itemMap.put("IQRY_CNT", getTagValue("IQRY_CNT", itemElement));
-					itemMap.put("GOODS_NM", getTagValue("GOODS_NM", itemElement));
-					itemMap.put("MANF", getTagValue("MANF", itemElement));
-					itemMap.put("MDL", getTagValue("MDL", itemElement));
-					itemMap.put("NRGT", getTagValue("NRGT", itemElement));
-					itemMap.put("GRBX", getTagValue("GRBX", itemElement));
-					itemMap.put("ENDPC", getTagValue("ENDPC", itemElement));
-					itemMap.put("VHCL_MLGE", getTagValue("VHCL_MLGE", itemElement));
-					itemMap.put("FUEL", getTagValue("FUEL", itemElement));
-					itemMap.put("SCRT_NM", getTagValue("SCRT_NM", itemElement));
-					itemMap.put("TPBZ", getTagValue("TPBZ", itemElement));
-					itemMap.put("ITM_NM", getTagValue("ITM_NM", itemElement));
-					itemMap.put("MMB_RGT_NM", getTagValue("MMB_RGT_NM", itemElement));
-					itemMap.put("CLTR_IMG_FILES", getTagValue("CLTR_IMG_FILES", itemElement));
+					// ✅ XML 응답에서 가져올 태그명과 DTO 필드명을 매핑
+					// 이 부분의 태그명은 Huch님의 실제 온비드 API XML 응답 태그명과 100% 일치해야 합니다.
+					String plnmNoStr = getTagValue("PLNM_NO", element); // 공고번호 (tenderId)
+					String pbctNoStr = getTagValue("PBCT_NO", element); // 공매번호 (pbctNo)
+					String cltrHstrNoStr = getTagValue("CLTR_HSTR_NO", element); // 물건이력번호 (cltrHstrNo)
+					String cltrMnmtNoStr = getTagValue("CLTR_MNMT_NO", element); // 물건관리번호 (cltrMnmtNo)
+					String cltrNm = getTagValue("CLTR_NM", element); // 물건명 (tenderTitle)
+					String dpslMtdNm = getTagValue("DPSL_MTD_NM", element); // 처분방식코드명 (organization)
+					String bidMnmtNo = getTagValue("BID_MNMT_NO", element); // 입찰번호 (bidNumber)
+					String pbctBegnDtm = getTagValue("PBCT_BEGN_DTM", element); // 입찰시작일시 (announcementDate)
+					String pbctClsDtm = getTagValue("PBCT_CLS_DTM", element); // 입찰마감일시 (deadline)
 
-					parsedItems.add(itemMap);
+					// 숫자 필드는 Long으로 파싱, null 체크 및 파싱 오류 처리
+					Long plnmNo = (plnmNoStr != null && !plnmNoStr.isEmpty()) ? Long.parseLong(plnmNoStr) : null;
+					Long pbctNo = (pbctNoStr != null && !pbctNoStr.isEmpty()) ? Long.parseLong(pbctNoStr) : null;
+
+					dtoList.add(TenderResponseDTO.builder().tenderId(plnmNo) // 공고번호 (Long)
+							.pbctNo(pbctNo) // 공매번호 (Long)
+							.cltrHstrNo(cltrHstrNoStr) // 물건이력번호 (String)
+							.cltrMnmtNo(cltrMnmtNoStr) // ✅ 물건관리번호 (String)
+							.tenderTitle(cltrNm).organization(dpslMtdNm).bidNumber(bidMnmtNo)
+							.announcementDate(parseDateTime(pbctBegnDtm)).deadline(parseDateTime(pbctClsDtm)).build());
 				}
 			}
-
 		} catch (Exception e) {
-			System.err.println("XML 파싱 중 오류 발생: " + e.getMessage());
-			e.printStackTrace();
+			log.error("XML 파싱 중 오류 발생: {}", e.getMessage(), e);
+			return Collections.emptyList();
 		}
-		return parsedItems;
+		return dtoList;
 	}
 
 	private String getTagValue(String tag, Element element) {
@@ -291,4 +194,201 @@ public class TenderService {
 		return null;
 	}
 
+	private List<TenderResponseDTO> filterDuplicateTenders(List<TenderResponseDTO> tenderList) {
+		if (tenderList == null || tenderList.isEmpty()) {
+			return Collections.emptyList();
+		}
+
+		Map<String, TenderResponseDTO> uniqueTendersMap = new HashMap<>();
+
+		for (TenderResponseDTO currentTender : tenderList) {
+			String cltrMnmtNo = currentTender.getCltrMnmtNo(); // ✅ 이제 DTO에 cltrMnmtNo 필드가 있습니다.
+
+			if (cltrMnmtNo == null || cltrMnmtNo.isEmpty()) {
+				// CLTR_MNMT_NO가 없으면 고유한 물건으로 간주하거나, 스킵할 수 있습니다.
+				// 여기서는 고유한 것으로 간주하고 UUID를 키로 사용하여 맵에 추가
+				log.warn("CLTR_MNMT_NO가 없는 입찰 항목이 발견되었습니다. 임시 고유 키로 추가합니다.");
+				uniqueTendersMap.put(UUID.randomUUID().toString(), currentTender);
+				continue;
+			}
+
+			if (uniqueTendersMap.containsKey(cltrMnmtNo)) {
+				// 이미 해당 물건관리번호가 맵에 있다면, 마감일시를 비교하여 더 최신 항목으로 업데이트
+				TenderResponseDTO existingTender = uniqueTendersMap.get(cltrMnmtNo);
+
+				// 현재 입찰 마감일시가 기존 항목의 마감일시보다 늦으면 업데이트
+				if (currentTender.getDeadline() != null && existingTender.getDeadline() != null
+						&& currentTender.getDeadline().isAfter(existingTender.getDeadline())) {
+					uniqueTendersMap.put(cltrMnmtNo, currentTender);
+				} else if (currentTender.getDeadline() != null && existingTender.getDeadline() == null) {
+					// 현재 항목의 날짜는 유효하고 기존 항목의 날짜는 유효하지 않다면 현재 항목으로 업데이트
+					uniqueTendersMap.put(cltrMnmtNo, currentTender);
+				}
+				// 기존 항목이 더 최신이거나 같으면 기존 항목 유지
+			} else {
+				// 처음 발견된 물건관리번호이므로 바로 추가
+				uniqueTendersMap.put(cltrMnmtNo, currentTender);
+			}
+		}
+
+		return new ArrayList<>(uniqueTendersMap.values());
+	}
+
+	public PagedTenderResponse searchTenders(String cltrNm, String dpslMtdCd, String sido, String sgk, String emd,
+			String goodsPriceFrom, String goodsPriceTo, String openPriceFrom, String openPriceTo, String pbctBegnDtm,
+			String pbctClsDtm, int pageNo, int numOfRows) {
+
+		long startTime = System.currentTimeMillis();
+		
+		// ✅ 1단계: 프론트엔드에서 넘어온 검색 조건 로그
+        log.info("Received search parameters - cltrNm: '{}', dpslMtdCd: '{}', sido: '{}', sgk: '{}', emd: '{}'",
+                 cltrNm, dpslMtdCd, sido, sgk, emd);
+        log.info("Received search prices - goodsPriceFrom: '{}', goodsPriceTo: '{}', openPriceFrom: '{}', openPriceTo: '{}'",
+                 goodsPriceFrom, goodsPriceTo, openPriceFrom, openPriceTo);
+        log.info("Received search dates - pbctBegnDtm: '{}', pbctClsDtm: '{}'", pbctBegnDtm, pbctClsDtm);
+        log.info("Received paging - pageNo: {}, numOfRows: {}", pageNo, numOfRows);
+
+		UriComponentsBuilder uriBuilder = UriComponentsBuilder.fromUriString(onbidApiBaseUrl)
+				.queryParam("serviceKey", onbidApiServiceKey).queryParam("pageNo", pageNo)
+				.queryParam("numOfRows", numOfRows);
+
+		// ✅ 검색 조건이 있을 경우에만 쿼리 파라미터로 추가
+		if (cltrNm != null && !cltrNm.isEmpty())
+			uriBuilder.queryParam("CLTR_NM", cltrNm);
+		if (dpslMtdCd != null && !dpslMtdCd.isEmpty())
+			uriBuilder.queryParam("DPSL_MTD_CD", dpslMtdCd);
+		if (sido != null && !sido.isEmpty())
+			uriBuilder.queryParam("SIDO", sido);
+		if (sgk != null && !sgk.isEmpty())
+			uriBuilder.queryParam("SGK", sgk);
+		if (emd != null && !emd.isEmpty())
+			uriBuilder.queryParam("EMD", emd);
+		if (goodsPriceFrom != null && !goodsPriceFrom.isEmpty())
+			uriBuilder.queryParam("GOODS_PRICE_FROM", goodsPriceFrom);
+		if (goodsPriceTo != null && !goodsPriceTo.isEmpty())
+			uriBuilder.queryParam("GOODS_PRICE_TO", goodsPriceTo);
+		if (openPriceFrom != null && !openPriceFrom.isEmpty())
+			uriBuilder.queryParam("OPEN_PRICE_FROM", openPriceFrom);
+		if (openPriceTo != null && !openPriceTo.isEmpty())
+			uriBuilder.queryParam("OPEN_PRICE_TO", openPriceTo);
+		if (pbctBegnDtm != null && !pbctBegnDtm.isEmpty())
+			uriBuilder.queryParam("PBCT_BEGN_DTM", pbctBegnDtm);
+		if (pbctClsDtm != null && !pbctClsDtm.isEmpty())
+			uriBuilder.queryParam("PBCT_CLS_DTM", pbctClsDtm);
+
+		URI uri = uriBuilder.encode().build().toUri();
+
+		log.info("Calling Onbid API for detailed search: {}", uri);
+
+		try {
+            ResponseEntity<String> responseEntity = restTemplate.getForEntity(uri, String.class);
+
+            if (responseEntity.getStatusCode().is2xxSuccessful() && responseEntity.getBody() != null) {
+                String rawXmlResponse = responseEntity.getBody();
+                
+                // ✅ XML 파싱 결과를 TenderListResult 객체로 받음
+                TenderListResult parsedResult = parseXmlToTenderDtosAndCount(rawXmlResponse);
+                List<TenderResponseDTO> dtoList = parsedResult.getTenders(); // 실제 DTO 목록
+                int totalCount = parsedResult.getTotalCount(); // 총 건수
+
+                List<TenderResponseDTO> filteredList = filterDuplicateTenders(dtoList); // 중복 제거 필터링
+
+                log.info("상세 검색 결과 (필터링 후): {}건, 총 건수: {}", filteredList.size(), totalCount);
+                
+                // ✅ PagedTenderResponse 객체로 묶어서 반환
+                return PagedTenderResponse.builder()
+                        .tenders(filteredList)
+                        .totalCount(totalCount)
+                        .pageNo(pageNo)
+                        .numOfRows(numOfRows)
+                        .build();
+
+            } else {
+                String statusCode = responseEntity.getStatusCode().toString();
+                String errorMessage = String.format("Onbid API 상세 검색 호출 실패: HTTP Status %s, Response Body: %s",
+                                                    statusCode, responseEntity.getBody());
+                log.error(errorMessage);
+                throw new RuntimeException(errorMessage);
+            }
+        } catch (Exception e) {
+            log.error("Onbid API 상세 검색 중 예외 발생: {}", e.getMessage(), e);
+            throw new RuntimeException("온비드 입찰 정보를 불러오는데 실패했습니다.", e);
+        } finally {
+        	long endTime = System.currentTimeMillis();
+            log.info("searchTenders 메서드 총 실행 시간: {}ms", (endTime - startTime));
+        }
+    }
+
+    // ✅ XML 파싱 결과를 TenderListResult 객체로 받도록 수정된 parseXmlToTenderDtos 메서드
+    // 이름도 더 명확하게 변경합니다. (기존 메서드 삭제 후 이 메서드 사용)
+    private TenderListResult parseXmlToTenderDtosAndCount(String xmlString) {
+		List<TenderResponseDTO> dtoList = new ArrayList<>();
+        int totalCount = 0; // 총 건수 초기화
+		try {
+			DocumentBuilderFactory factory = DocumentBuilderFactory.newInstance();
+			DocumentBuilder builder = factory.newDocumentBuilder();
+			InputSource is = new InputSource(new StringReader(xmlString));
+            is.setEncoding("UTF-8");
+			Document doc = builder.parse(is);
+			doc.getDocumentElement().normalize();
+
+            // ✅ TotalCount 파싱
+            String totalCountStr = getTagValue("TotalCount", doc.getDocumentElement());
+            if (totalCountStr != null && !totalCountStr.isEmpty()) {
+                totalCount = Integer.parseInt(totalCountStr);
+            } else {
+                log.warn("XML 응답에서 TotalCount를 찾을 수 없거나 비어 있습니다.");
+            }
+
+
+			NodeList itemList = doc.getElementsByTagName("item");
+
+			for (int i = 0; i < itemList.getLength(); i++) {
+				Node itemNode = itemList.item(i);
+				if (itemNode.getNodeType() == Node.ELEMENT_NODE) {
+					Element element = (Element) itemNode;
+
+					String plnmNoStr = getTagValue("PLNM_NO", element);
+                    String pbctNoStr = getTagValue("PBCT_NO", element);
+                    String cltrHstrNoStr = getTagValue("CLTR_HSTR_NO", element);
+					String cltrMnmtNoStr = getTagValue("CLTR_MNMT_NO", element);
+					String cltrNm = getTagValue("CLTR_NM", element);
+					String dpslMtdNm = getTagValue("DPSL_MTD_NM", element);
+					String bidMnmtNo = getTagValue("BID_MNMT_NO", element);
+					String pbctBegnDtm = getTagValue("PBCT_BEGN_DTM", element);
+					String pbctClsDtm = getTagValue("PBCT_CLS_DTM", element);
+
+                    Long plnmNo = (plnmNoStr != null && !plnmNoStr.isEmpty()) ? Long.parseLong(plnmNoStr) : null;
+                    Long pbctNo = (pbctNoStr != null && !pbctNoStr.isEmpty()) ? Long.parseLong(pbctNoStr) : null;
+//                    Long cltrHstrNo = (cltrHstrNoStr != null && !cltrHstrNoStr.isEmpty()) ? Long.parseLong(cltrHstrNoStr) : null;
+
+
+					dtoList.add(TenderResponseDTO.builder()
+							.tenderId(plnmNo)
+                            .pbctNo(pbctNo)
+                            .cltrHstrNo(cltrHstrNoStr)
+							.cltrMnmtNo(cltrMnmtNoStr)
+							.tenderTitle(cltrNm)
+							.organization(dpslMtdNm)
+							.bidNumber(bidMnmtNo)
+							.announcementDate(parseDateTime(pbctBegnDtm))
+							.deadline(parseDateTime(pbctClsDtm))
+							.build());
+				}
+			}
+		} catch (Exception e) {
+			log.error("XML 파싱 중 오류 발생: {}", e.getMessage(), e);
+			// 파싱 오류 시에도 totalCount는 0으로 반환될 수 있음
+		}
+		// ✅ 총 건수와 DTO 목록을 함께 반환하는 내부 클래스 인스턴스 생성
+		return new TenderListResult(dtoList, totalCount);
+	}
+
+    @Getter
+    @Setter
+    @AllArgsConstructor
+    private static class TenderListResult {
+        private List<TenderResponseDTO> tenders;
+        private int totalCount;
+    }
 }

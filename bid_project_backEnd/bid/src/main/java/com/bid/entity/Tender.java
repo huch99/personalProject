@@ -25,6 +25,9 @@ public class Tender {
 	private Long pbcdNo;
 	
 	@Column
+	private String cltrMnmtNo;
+	
+	@Column
 	private String cltrHstrNo;
 	
 	@Column(nullable = false)
