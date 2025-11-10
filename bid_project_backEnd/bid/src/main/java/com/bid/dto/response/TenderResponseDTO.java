@@ -25,6 +25,7 @@ public class TenderResponseDTO {
 	private String tenderTitle; // 입찰 공고 제목
 	private String organization; // 발주 기관
 	private String bidNumber; // 입찰 공고 번호
+	private String goodsName;
 	
 	@JsonFormat(shape = JsonFormat.Shape.STRING, pattern = "yyyy-MM-dd HH:mm:ss") // LocalDateTime 직렬화 형식 지정
     private LocalDateTime announcementDate; // 공고일
@@ -43,6 +44,7 @@ public class TenderResponseDTO {
                 .organization(tender.getOrganization())
                 .bidNumber(tender.getBidNumber())
                 .announcementDate(tender.getAnnouncementDate())
+                .goodsName(tender.getGoodsName())
                 .deadline(tender.getDeadline())
                 .build();
     }

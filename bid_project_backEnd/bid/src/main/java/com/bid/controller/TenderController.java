@@ -1,6 +1,7 @@
 package com.bid.controller;
 
 import java.util.List;
+import java.util.NoSuchElementException;
 
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
@@ -37,15 +38,21 @@ public class TenderController {
         return ResponseEntity.ok(tenders); // HTTP 200 OK 응답과 함께 입찰 목록 반환
     }
     
-    /**
-     * 특정 입찰 정보를 조회하는 API (프론트 상세 페이지용)
-     * GET /api/tenders/{tenderId}
-     */
-    @GetMapping("/{tenderId}")
-    public ResponseEntity<TenderResponseDTO> getTenderById(@PathVariable("tenderId") Long tenderId) {
-//    	TenderResponseDTO tender = tenderService.getTenderByTenderId(tenderId);
-//        return ResponseEntity.ok(tender); // HTTP 200 OK 응답과 함께 단일 입찰 정보 반환
-    	throw new RuntimeException("온비드 공공 API는 현재 상세 ID 조회를 직접 지원하지 않습니다. 로직 수정 필요.");
+    @GetMapping("/{pbctNo}")
+    public ResponseEntity<TenderResponseDTO> getTenderByPbctNo(@PathVariable("pbctNo") Long pbctNo) {
+    	log.info("✅ Controller: getTenderDetail 요청 시작, pbctNo: {}", pbctNo);
+        try {
+            // 서비스 메서드 호출
+            TenderResponseDTO tenderDetail = tenderService.getTenderDetail(pbctNo); // ✅ pbctNo 전달
+            log.info("✅ Controller: Tender detail fetched successfully for PBCT_NO: {}", pbctNo);
+            return ResponseEntity.ok(tenderDetail);
+        } catch (NoSuchElementException e) {
+            log.warn("Controller: Tender with PBCT_NO {} not found: {}", pbctNo, e.getMessage());
+            return ResponseEntity.notFound().build();
+        } catch (Exception e) {
+            log.error("Controller: Error fetching tender detail for PBCT_NO {}: {}", pbctNo, e.getMessage(), e);
+            return ResponseEntity.status(500).build();
+        }
     }
     
     @GetMapping("/search")

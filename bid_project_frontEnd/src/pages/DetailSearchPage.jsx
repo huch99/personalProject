@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import styled from 'styled-components';
 
@@ -174,84 +174,95 @@ const DetailSearchPage = () => {
     const [sido, setSido] = useState(''); // 물건소재지 (시도)
     const [sgk, setSgk] = useState(''); // 물건소재지 (시군구)
     const [emd, setEmd] = useState(''); // 물건소재지 (읍면동)
-    const [minAppraisalPrice, setMinAppraisalPrice] = useState(''); // 감정가 하한 (APSL_ASES_AVG_AMT)
+    const [minAppraisalPrice, setMinAppraisalPrice] = useState(''); // 감정가 하한
     const [maxAppraisalPrice, setMaxAppraisalPrice] = useState(''); // 감정가 상한
-    const [minBidPrice, setMinBidPrice] = useState(''); // 최저입찰가 하한 (MIN_BID_PRC)
+    const [minBidPrice, setMinBidPrice] = useState(''); // 최저입찰가 하한
     const [maxBidPrice, setMaxBidPrice] = useState(''); // 최저입찰가 상한
-    const [startDate, setStartDate] = useState(''); // 입찰일자 From (PBCT_BEGN_DTM)
-    const [endDate, setEndDate] = useState(''); // 입찰일자 To (PBCT_CLS_DTM)
+    const [startDate, setStartDate] = useState(''); // 입찰일자 From
+    const [endDate, setEndDate] = useState(''); // 입찰일자 To
 
     // 결과 및 로딩 상태
     const [searchResults, setSearchResults] = useState([]);
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState(null);
 
-    // ✅ 페이징 관련 상태 추가
+    // ✅ 초기 렌더링 시 검색을 방지하기 위한 useRef (필요시 사용)
+    const isInitialMount = useRef(true);
+
+    // 페이징 관련 상태
     const [currentPage, setCurrentPage] = useState(1);
     const [totalItems, setTotalItems] = useState(0);
-    const [itemsPerPage, setItemsPerPage] = useState(10); // 한 페이지에 보여줄 아이템 개수 (백엔드 numOfRows와 일치)
+    const [itemsPerPage, setItemsPerPage] = useState(10);
 
     useEffect(() => {
-        // 검색 조건이 하나도 없으면 초기 검색을 방지하거나,
-        // 초기 로드 시 전체 1페이지를 불러오도록 할 수 있습니다.
-        // 여기서는 페이지 로드 시 1페이지를 자동으로 검색하도록 설정.
         fetchSearchResults(currentPage, itemsPerPage);
     }, [currentPage, itemsPerPage]); // currentPage 또는 itemsPerPage 변경 시 재검색
 
-    const fetchSearchResults = async (page, rows) => {
-        setLoading(true);
-        setError(null);
-        // setSearchResults([]);
+    // ✅ fetchSearchResults 함수가 검색 조건을 인자로 받도록 변경
+    const fetchSearchResults = async (page, rows) => { // ✅ 인자 목록 간소화
+    setLoading(true);
+    setError(null);
+    
+    try {
+      const queryParams = new URLSearchParams();
+      // ✅ 현재 컴포넌트의 useState 상태들을 사용
+      if (searchTerm) queryParams.append('cltrNm', searchTerm);
+      if (dpslMtdCd) queryParams.append('dpslMtdCd', dpslMtdCd);
+      if (sido) queryParams.append('sido', sido);
+      if (sgk) queryParams.append('sgk', sgk);
+      if (emd) queryParams.append('emd', emd);
+      if (minAppraisalPrice) queryParams.append('goodsPriceFrom', minAppraisalPrice);
+      if (maxAppraisalPrice) queryParams.append('goodsPriceTo', maxAppraisalPrice);
+      if (minBidPrice) queryParams.append('openPriceFrom', minBidPrice);
+      if (maxBidPrice) queryParams.append('openPriceTo', maxBidPrice);
+      if (startDate) queryParams.append('pbctBegnDtm', startDate.replace(/-/g, ''));
+      if (endDate) queryParams.append('pbctClsDtm', endDate.replace(/-/g, ''));
+      
+      queryParams.append('pageNo', page);
+      queryParams.append('numOfRows', rows);
 
-        try {
-            const queryParams = new URLSearchParams();
-            if (searchTerm) queryParams.append('cltrNm', searchTerm);
-            if (dpslMtdCd) queryParams.append('dpslMtdCd', dpslMtdCd);
-            if (sido) queryParams.append('sido', sido);
-            if (sgk) queryParams.append('sgk', sgk);
-            if (emd) queryParams.append('emd', emd);
-            if (minAppraisalPrice) queryParams.append('goodsPriceFrom', minAppraisalPrice);
-            if (maxAppraisalPrice) queryParams.append('goodsPriceTo', maxAppraisalPrice);
-            if (minBidPrice) queryParams.append('openPriceFrom', minBidPrice);
-            if (maxBidPrice) queryParams.append('openPriceTo', maxBidPrice);
-            if (startDate) queryParams.append('pbctBegnDtm', startDate.replace(/-/g, ''));
-            if (endDate) queryParams.append('pbctClsDtm', endDate.replace(/-/g, ''));
 
-            // ✅ 현재 페이지 번호와 한 페이지당 아이템 개수 추가
-            queryParams.append('pageNo', page);
-            queryParams.append('numOfRows', rows);
+      const response = await fetch(`http://localhost:8080/api/tenders/search?${queryParams.toString()}`);
 
 
-            const response = await fetch(`http://localhost:8080/api/tenders/search?${queryParams.toString()}`);
+      if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(`HTTP error! status: ${response.status} - ${errorText}`);
+      }
 
-            if (!response.ok) {
-                const errorText = await response.text();
-                throw new Error(`HTTP error! status: ${response.status} - ${errorText}`);
-            }
+      const pagedResponse = await response.json(); 
+      setSearchResults(pagedResponse.tenders || []); 
+      setTotalItems(pagedResponse.totalCount || 0);
+      setCurrentPage(pagedResponse.pageNo || 1);
+      setItemsPerPage(pagedResponse.numOfRows || 10);
 
-            // ✅ 응답 객체가 PagedTenderResponse 형태로 변경됨
-            const pagedResponse = await response.json();
-            setSearchResults(pagedResponse.tenders || []); // 현재 페이지의 입찰 목록
-            setTotalItems(pagedResponse.totalCount || 0);   // 총 건수 설정
-            setCurrentPage(pagedResponse.pageNo || 1);     // 현재 페이지 번호 설정 (백엔드에서 받은 값으로 갱신)
-            setItemsPerPage(pagedResponse.numOfRows || 10); // 한 페이지당 아이템 개수 설정 (백엔드에서 받은 값으로 갱신)
+    } catch (err) {
+      setError(err.message || '검색 중 오류가 발생했습니다.');
+      console.error("Failed to fetch detailed search results:", err);
+      setSearchResults([]); 
+      setTotalItems(0);     
+    } finally {
+      setLoading(false);
+    }
+  };
 
-        } catch (err) {
-            setError(err.message || '검색 중 오류가 발생했습니다.');
-            console.error("Failed to fetch detailed search results:", err);
-            setSearchResults([]); // ✅ 에러 발생 시 결과 배열을 비워줍니다.
-            setTotalItems(0);
-        } finally {
-            setLoading(false);
-        }
-    };
+    // ✅ useEffect: currentPage 또는 itemsPerPage 변경 시 자동으로 검색
+    useEffect(() => {
+    // 최초 렌더링 시에는 검색하지 않고, 페이지네이션 변경 시에만 검색
+    if (currentPage !== 1 || totalItems > 0) { // totalItems > 0 조건은 검색결과가 있을 때만 페이지 이동으로 api 호출하게
+        fetchSearchResults(currentPage, itemsPerPage);
+    } else { // 페이지가 1이거나 검색 전이라면 초기 검색 (빈 값으로 한번 호출)
+        fetchSearchResults(1, itemsPerPage);
+    }
+    // 이펙트의 의존성 배열에서 검색 조건 상태값들을 모두 제거
+  }, [currentPage, itemsPerPage]); // ✅ 의존성 배열 간소화
 
-    // ✅ handleSubmit은 이제 페이지를 1로 초기화하고 fetchSearchResults를 호출합니다.
-    const handleSearch = (e) => {
-        e.preventDefault();
-        setCurrentPage(1); // 새 검색 시 항상 1페이지부터 시작
-        fetchSearchResults(1, itemsPerPage); // 검색 실행
-    };
+  // ✅ handleSubmit은 검색 버튼 클릭 시 currentPage를 1로 재설정하고, 즉시 fetchSearchResults 호출
+  const handleSearch = (e) => {
+    e.preventDefault();
+    setCurrentPage(1); // 검색 조건 변경 시 무조건 1페이지부터
+    fetchSearchResults(1, itemsPerPage); // ✅ 현재 입력된 검색 조건으로 즉시 검색
+  };
 
     // ✅ 페이지네이션 관련 계산
     const totalPages = Math.ceil(totalItems / itemsPerPage);
@@ -411,7 +422,10 @@ const DetailSearchPage = () => {
                 {searchResults.length === 0 && !loading && !error && <p>검색 결과가 없습니다.</p>}
 
                 {searchResults.map((item) => (
-                    <ResultItem key={item.tenderId || item.cltrMnmtNo}> {/* 고유 키 사용 */}
+                    <ResultItem key={item.pbctNo}
+                      onClick={() => navigate(`/tenders/${item.pbctNo}`)}
+                      style={{ cursor: 'pointer' }}
+                    > {/* 고유 키 사용 */}
                         <h3>{item.tenderTitle}</h3>
                         <p><strong>처분방식:</strong> {item.organization}</p>
                         <p><strong>공고번호:</strong> {item.tenderId}</p>

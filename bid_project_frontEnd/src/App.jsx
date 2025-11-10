@@ -8,6 +8,7 @@ import FaqDetail from "./pages/faqPages/FaqDetail"
 import FaqWrite from "./pages/faqPages/FaqWrite"
 import FaqEdit from "./pages/faqPages/FaqEdit"
 import DetailSearchPage from "./pages/DetailSearchPage"
+import TenderDetailPage from "./pages/tenderPages/TenderDetailPage"
 
 
 function App() {
@@ -20,6 +21,10 @@ function App() {
 
           {/* 상세 검색 페이지 루트 */}
           <Route path="/search" element={<Layout><DetailSearchPage /></Layout>}/>
+
+          {/* 공매물 루트 */}
+          <Route path="/tenders/:tenderId" element={<Layout> <TenderDetailPage /> </Layout>} />
+
           {/* 게시판 루트 */}
           <Route path="/faq" element={<Layout><FaqBoard /></Layout>} />
           <Route path="/faq/:faqId" element={<Layout><FaqDetail /></Layout>} />

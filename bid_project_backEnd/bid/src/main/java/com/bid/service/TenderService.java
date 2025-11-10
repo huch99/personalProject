@@ -10,6 +10,7 @@ import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.NoSuchElementException;
 import java.util.UUID;
 
 import javax.xml.parsers.DocumentBuilder;
@@ -69,7 +70,7 @@ public class TenderService {
 				List<TenderResponseDTO> dtoList = parseXmlToTenderDtos(rawXmlResponse);
 
 				List<TenderResponseDTO> filteredList = filterDuplicateTenders(dtoList);
-
+				
 				if (filteredList.isEmpty()) {
 					log.warn("Onbid API 응답을 파싱하고 필터링했지만 DTO 리스트가 비어 있습니다.");
 				}
@@ -86,6 +87,53 @@ public class TenderService {
 			throw new RuntimeException("온비드 입찰 정보를 불러오는데 실패했습니다.", e);
 		}
 	}
+	
+	 public TenderResponseDTO getTenderDetail(Long pbctNo) { // ✅ 파라미터 이름 pbctNo로 변경
+	        long startTime = System.currentTimeMillis();
+
+	        UriComponentsBuilder uriBuilder = UriComponentsBuilder.fromUriString(onbidApiBaseUrl)
+	                .queryParam("serviceKey", onbidApiServiceKey)
+	                .queryParam("pageNo", 1)
+	                .queryParam("numOfRows", 1)
+	                .queryParam("PBCT_NO", pbctNo.toString()); // ✅ 온비드 API에 PBCT_NO 파라미터로 요청
+
+	        URI uri = uriBuilder.encode().build().toUri();
+
+	        log.info("Calling Onbid API for tender detail: {}", uri);
+
+	        try {
+	            ResponseEntity<String> responseEntity = restTemplate.getForEntity(uri, String.class);
+
+	            if (responseEntity.getStatusCode().is2xxSuccessful() && responseEntity.getBody() != null) {
+	                String rawXmlResponse = responseEntity.getBody();
+	                log.debug("Onbid API Raw XML Response for detail: {}", rawXmlResponse);
+
+	                TenderListResult parsedResult = parseXmlToTenderDtosAndCount(rawXmlResponse); // 기존 파싱 메서드 재활용
+	                List<TenderResponseDTO> dtoList = parsedResult.getTenders();
+
+	                // DTO 리스트에서 PBCT_NO가 일치하는 첫 번째 항목을 찾아 반환
+	                return dtoList.stream()
+	                        .filter(dto -> dto.getPbctNo() != null && dto.getPbctNo().equals(pbctNo)) // ✅ PbctNo와 일치하는지 확인
+	                        .findFirst()
+	                        .orElseThrow(() -> new NoSuchElementException("입찰 공고번호 " + pbctNo + "를 찾을 수 없습니다."));
+
+	            } else {
+	                String statusCode = responseEntity.getStatusCode().toString();
+	                String errorMessage = String.format("Onbid API 상세 조회 호출 실패: HTTP Status %s, Response Body: %s",
+	                                                    statusCode, responseEntity.getBody());
+	                log.error(errorMessage);
+	                throw new RuntimeException(errorMessage);
+	            }
+	        } catch (NoSuchElementException e) {
+	            throw e;
+	        } catch (Exception e) {
+	            log.error("Onbid API 상세 조회 중 예외 발생: {}", e.getMessage(), e);
+	            throw new RuntimeException("온비드 입찰 상세 정보를 불러오는데 실패했습니다.", e);
+	        } finally {
+	            long endTime = System.currentTimeMillis();
+	            log.info("getTenderDetail 메서드 총 실행 시간: {}ms", (endTime - startTime));
+	        }
+	    }
 
 	private TenderResponseDTO mapOnbidItemToTenderResponseDTO(OnbidItem onbidItem) {
 		// 공고일/마감일이 String으로 오는 경우, 파싱 로직 필요
@@ -285,7 +333,7 @@ public class TenderService {
 
             if (responseEntity.getStatusCode().is2xxSuccessful() && responseEntity.getBody() != null) {
                 String rawXmlResponse = responseEntity.getBody();
-                
+//                log.debug("Onbid API Raw XML Response for search: {}", rawXmlResponse);
                 // ✅ XML 파싱 결과를 TenderListResult 객체로 받음
                 TenderListResult parsedResult = parseXmlToTenderDtosAndCount(rawXmlResponse);
                 List<TenderResponseDTO> dtoList = parsedResult.getTenders(); // 실제 DTO 목록
@@ -324,24 +372,41 @@ public class TenderService {
     private TenderListResult parseXmlToTenderDtosAndCount(String xmlString) {
 		List<TenderResponseDTO> dtoList = new ArrayList<>();
         int totalCount = 0; // 총 건수 초기화
-		try {
-			DocumentBuilderFactory factory = DocumentBuilderFactory.newInstance();
-			DocumentBuilder builder = factory.newDocumentBuilder();
-			InputSource is = new InputSource(new StringReader(xmlString));
+        try {
+            DocumentBuilderFactory factory = DocumentBuilderFactory.newInstance();
+            DocumentBuilder builder = factory.newDocumentBuilder();
+            InputSource is = new InputSource(new StringReader(xmlString));
             is.setEncoding("UTF-8");
-			Document doc = builder.parse(is);
-			doc.getDocumentElement().normalize();
+            Document doc = builder.parse(is);
+            doc.getDocumentElement().normalize();
 
-            // ✅ TotalCount 파싱
-            String totalCountStr = getTagValue("TotalCount", doc.getDocumentElement());
-            if (totalCountStr != null && !totalCountStr.isEmpty()) {
-                totalCount = Integer.parseInt(totalCountStr);
+            // ✅ XML 응답에서 <body> 태그를 찾고, 그 안에서 <totalCount> 태그를 찾습니다.
+            // body 노드 안에 totalCount가 있는 구조이므로, body 태그를 먼저 찾습니다.
+            NodeList bodyNodes = doc.getElementsByTagName("body"); // body 태그를 찾음
+            if (bodyNodes.getLength() > 0) {
+                Element bodyElement = (Element) bodyNodes.item(0); // 첫 번째 body 태그를 가져옴
+
+                // body 태그 안에서 totalCount 태그를 찾습니다.
+                // getTagValue는 element의 자식 노드에서 바로 태그를 찾는 헬퍼 메서드이므로,
+                // bodyElement를 전달하여 그 자식 노드 중에서 totalCount를 찾도록 합니다.
+                String totalCountStr = getTagValue("totalCount", bodyElement); // ✅ 태그 이름 소문자 'totalCount'로 변경
+
+                if (totalCountStr != null && !totalCountStr.isEmpty()) {
+                    try {
+                        totalCount = Integer.parseInt(totalCountStr);
+                        log.info("XML 응답에서 TotalCount 파싱 성공: {}", totalCount);
+                    } catch (NumberFormatException e) {
+                        log.warn("TotalCount 값 '{}'이 유효한 숫자가 아닙니다.", totalCountStr);
+                    }
+                } else {
+                    log.warn("XML 응답 바디에서 'totalCount' 태그를 찾을 수 없거나 비어 있습니다.");
+                }
             } else {
-                log.warn("XML 응답에서 TotalCount를 찾을 수 없거나 비어 있습니다.");
+                log.warn("XML 응답에서 'body' 태그를 찾을 수 없습니다.");
             }
 
-
-			NodeList itemList = doc.getElementsByTagName("item");
+            // ... (기존 itemList 및 item 파싱 로직은 동일) ...
+            NodeList itemList = doc.getElementsByTagName("item");
 
 			for (int i = 0; i < itemList.getLength(); i++) {
 				Node itemNode = itemList.item(i);
@@ -350,7 +415,7 @@ public class TenderService {
 
 					String plnmNoStr = getTagValue("PLNM_NO", element);
                     String pbctNoStr = getTagValue("PBCT_NO", element);
-                    String cltrHstrNoStr = getTagValue("CLTR_HSTR_NO", element);
+                    String cltrHstrNoStr = getTagValue("CLTR_HSTR_NO", element); // String 그대로 파싱
 					String cltrMnmtNoStr = getTagValue("CLTR_MNMT_NO", element);
 					String cltrNm = getTagValue("CLTR_NM", element);
 					String dpslMtdNm = getTagValue("DPSL_MTD_NM", element);
@@ -360,8 +425,6 @@ public class TenderService {
 
                     Long plnmNo = (plnmNoStr != null && !plnmNoStr.isEmpty()) ? Long.parseLong(plnmNoStr) : null;
                     Long pbctNo = (pbctNoStr != null && !pbctNoStr.isEmpty()) ? Long.parseLong(pbctNoStr) : null;
-//                    Long cltrHstrNo = (cltrHstrNoStr != null && !cltrHstrNoStr.isEmpty()) ? Long.parseLong(cltrHstrNoStr) : null;
-
 
 					dtoList.add(TenderResponseDTO.builder()
 							.tenderId(plnmNo)
@@ -376,12 +439,10 @@ public class TenderService {
 							.build());
 				}
 			}
-		} catch (Exception e) {
-			log.error("XML 파싱 중 오류 발생: {}", e.getMessage(), e);
-			// 파싱 오류 시에도 totalCount는 0으로 반환될 수 있음
-		}
-		// ✅ 총 건수와 DTO 목록을 함께 반환하는 내부 클래스 인스턴스 생성
-		return new TenderListResult(dtoList, totalCount);
+        } catch (Exception e) {
+            log.error("XML 파싱 중 오류 발생: {}", e.getMessage(), e);
+        }
+        return new TenderListResult(dtoList, totalCount);
 	}
 
     @Getter

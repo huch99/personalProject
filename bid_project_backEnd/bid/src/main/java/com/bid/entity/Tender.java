@@ -39,6 +39,9 @@ public class Tender {
     @Column(nullable = false)
     private LocalDateTime deadline; // 입찰 마감일
     
+    @Column
+    private String goodsName;
+    
     @Column(nullable = true, length = 1000)
     private String description; // 상세 내용 (선택 사항)
 
