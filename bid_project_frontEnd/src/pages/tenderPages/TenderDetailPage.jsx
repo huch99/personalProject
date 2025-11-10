@@ -96,23 +96,19 @@ const ErrorMessage = styled.p`
 `;
 
 const TenderDetailPage = () => {
-    const { pbctNo } = useParams(); // URL 파라미터에서 tenderId를 가져옴
+    const { cltrMnmtNo } = useParams(); // URL 파라미터에서 tenderId를 가져옴
     const navigate = useNavigate();
 
     const [tenderDetail, setTenderDetail] = useState(null);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState(null);
 
-    useEffect(() => {
-        console.log('fetchTenderDetail 시작');
+    useEffect(() => {        
         const fetchTenderDetail = async () => {
             try {
-                console.log('셋로딩');
                 setLoading(true);
                 
-                console.log('response 가져오기 시작');
-                const response = await fetch(`http://localhost:8080/api/tenders/${pbctNo}`);
-                console.log('response 가져오기 끝');
+                const response = await fetch(`http://localhost:8080/api/tenders/${cltrMnmtNo}`);
 
                 if (!response.ok) {
                     const errorText = await response.text();
@@ -129,10 +125,10 @@ const TenderDetailPage = () => {
             }
         };
 
-        if (pbctNo) {
+        if (cltrMnmtNo) {
             fetchTenderDetail();
         }
-    }, [pbctNo]); // tenderId가 변경될 때마다 데이터를 다시 불러옴
+    }, [cltrMnmtNo]); // tenderId가 변경될 때마다 데이터를 다시 불러옴
 
     if (loading) return <LoadingMessage>상세 정보 로딩 중...</LoadingMessage>;
     if (error) return <ErrorMessage>오류: {error}</ErrorMessage>;

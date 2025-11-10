@@ -2,7 +2,7 @@ import React, { useEffect } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
 import styled from 'styled-components';
 import { fetchTenders } from '../features/tenders/tenderSlicce';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 
 // 스타일드 컴포넌트 정의
 const S_HomePageContainer = styled.div`
@@ -142,14 +142,18 @@ const S_ErrorText = styled.p`
 `;
 
 const HomePage = () => {
+  const navigate = useNavigate();
   const dispatch = useDispatch();
   const bids = useSelector((state) => state.tenders.bids);
   const status = useSelector((state) => state.tenders.status);
   const error = useSelector((state) => state.tenders.error);
+  const currentPage = useSelector((state) => state.tenders.currentPage); // ✅ Redux에서 현재 페이지
+  const totalCount = useSelector((state) => state.tenders.totalCount);   // ✅ Redux에서 전체 아이템 수
+  const numOfRows = useSelector((state) => state.tenders.numOfRows);     // ✅ Redux에서 한 페이지당 아이템 수
 
   useEffect(() => {
-    dispatch(fetchTenders());
-  }, [dispatch]);
+    dispatch(fetchTenders({ pageNo: currentPage })); 
+  }, [dispatch, currentPage]);
 
   let content;
 
@@ -159,11 +163,11 @@ const HomePage = () => {
     if (bids.length > 0) {
       content = (
         <S_BidGrid>
-          {bids.map((bid, index) => (
-            <S_BidItemCard key={bid.pbctNo + '-' + index} to={`/tenders/${bid.pbctNo}`}>
+          {bids.map((bid) => (
+            <S_BidItemCard key={bid.cltrMnmtNo} to={`/tenders/${bid.cltrMnmtNo}`}>
               <S_BidTitle>{bid.tenderTitle}</S_BidTitle>
               <S_BidMeta>
-                <strong>마감일 : </strong> {bid.deadline}
+                <strong>마감일 : </strong> {bid.deadline ? new Date(bid.deadline).toLocaleString() : 'N/A'}
               </S_BidMeta>
               <S_BidMeta>
                 <strong>처분 방식 : </strong> {bid.organization}
@@ -172,7 +176,7 @@ const HomePage = () => {
                 <strong>공고 번호 : </strong> {bid.pbctNo}
               </S_BidMeta>
               <S_BidMeta>
-                <strong>공고일 : </strong> {bid.announcementDate}
+                <strong>공고일 : </strong> {bid.announcementDate ? new Date(bid.announcementDate).toLocaleString() : 'N/A'}
               </S_BidMeta>
             </S_BidItemCard>
           ))}
@@ -184,6 +188,28 @@ const HomePage = () => {
   } else if (status === 'failed') {
     content = <S_ErrorText>{error}</S_ErrorText>;
   }
+
+  // ✅ 페이징 관련 계산 (DetailedSearchPage와 동일)
+  const totalPages = Math.ceil(totalCount / numOfRows);
+  const pageNumbers = [];
+  const maxPageButtons = 10; // 화면에 표시할 페이지 버튼 수
+  let startPage = Math.max(1, currentPage - Math.floor(maxPageButtons / 2));
+  let endPage = Math.min(totalPages, startPage + maxPageButtons - 1);
+
+  // 현재 페이지가 끝 페이지에 가까울 때 startPage 조정
+  if (endPage - startPage + 1 < maxPageButtons) {
+    startPage = Math.max(1, endPage - maxPageButtons + 1);
+  }
+
+  for (let i = startPage; i <= endPage; i++) {
+    pageNumbers.push(i);
+  }
+
+  // ✅ 페이지 변경 핸들러
+  const handlePageChange = (page) => {
+    if (page < 1 || page > totalPages) return;
+    dispatch(setCurrentPageRedux(page)); // Redux 스토어에 페이지 변경 요청
+  };
 
   return (
     <S_HomePageContainer>
@@ -203,6 +229,32 @@ const HomePage = () => {
       <S_BidListSection>
         <S_SectionTitle>최신 입찰 공고</S_SectionTitle>
         {content} {/* 위에서 조건부로 생성된 콘텐츠를 렌더링 */}
+        {/* ✅ 페이지네이션 UI 추가 (DetailedSearchPage와 유사) */}
+        {!status === 'loading' && !error && totalPages > 1 && (
+          <S_PaginationContainer>
+            <S_PageButton onClick={() => handlePageChange(1)} disabled={currentPage === 1}>
+              {'<<'}
+            </S_PageButton>
+            <S_PageButton onClick={() => handlePageChange(currentPage - 1)} disabled={currentPage === 1}>
+              {'<'}
+            </S_PageButton>
+            {pageNumbers.map((page) => (
+              <S_PageButton
+                key={page}
+                onClick={() => handlePageChange(page)}
+                active={page === currentPage}
+              >
+                {page}
+              </S_PageButton>
+            ))}
+            <S_PageButton onClick={() => handlePageChange(currentPage + 1)} disabled={currentPage === totalPages}>
+              {'>'}
+            </S_PageButton>
+            <S_PageButton onClick={() => handlePageChange(totalPages)} disabled={currentPage === totalPages}>
+              {'>>'}
+            </S_PageButton>
+          </S_PaginationContainer>
+        )}
       </S_BidListSection>
     </S_HomePageContainer>
   );

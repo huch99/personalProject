@@ -53,71 +53,98 @@ public class TenderService {
 
 	private static final DateTimeFormatter ONBID_DATE_TIME_FORMATTER = DateTimeFormatter.ofPattern("yyyyMMddHHmmss");
 
-	public List<TenderResponseDTO> getAllTenders() {
+	public PagedTenderResponse getAllTenders(int pageNo, int numOfRows) {
 		// 1. 온비드 API 호출을 위한 URI 구성
-		URI uri = UriComponentsBuilder.fromUriString(onbidApiBaseUrl).queryParam("serviceKey", onbidApiServiceKey)
-				.queryParam("pageNo", 1).queryParam("numOfRows", 100).queryParam("DPSL_MTD_CD", "0001")
-				.queryParam("sort", "PBCT_BEGN_DTM") // 예를 들어 공고 시작일 기준
-				.encode().build().toUri();
-
-		try {
-			ResponseEntity<String> responseEntity = restTemplate.getForEntity(uri, String.class);
-
-			// ✅ 3. 응답 처리 및 XML 데이터 파싱
-			if (responseEntity.getStatusCode().is2xxSuccessful() && responseEntity.getBody() != null) {
-				String rawXmlResponse = responseEntity.getBody();
-
-				List<TenderResponseDTO> dtoList = parseXmlToTenderDtos(rawXmlResponse);
-
-				List<TenderResponseDTO> filteredList = filterDuplicateTenders(dtoList);
-				
-				if (filteredList.isEmpty()) {
-					log.warn("Onbid API 응답을 파싱하고 필터링했지만 DTO 리스트가 비어 있습니다.");
-				}
-				return filteredList;
-			} else {
-				String statusCode = responseEntity.getStatusCode().toString();
-				String errorMessage = String.format("Onbid API 호출 실패: HTTP Status %s, Response Body: %s", statusCode,
-						responseEntity.getBody());
-				log.error(errorMessage);
-				throw new RuntimeException(errorMessage);
-			}
-		} catch (Exception e) {
-			log.error("Onbid API 호출 중 예외 발생: {}", e.getMessage(), e);
-			throw new RuntimeException("온비드 입찰 정보를 불러오는데 실패했습니다.", e);
-		}
-	}
-	
-	 public TenderResponseDTO getTenderDetail(Long pbctNo) { // ✅ 파라미터 이름 pbctNo로 변경
-	        long startTime = System.currentTimeMillis();
-
-	        UriComponentsBuilder uriBuilder = UriComponentsBuilder.fromUriString(onbidApiBaseUrl)
+		
+		final int FIXED_HOME_PAGE_NUM_OF_ROWS = 10;
+		
+		 UriComponentsBuilder uriBuilder = UriComponentsBuilder.fromUriString(onbidApiBaseUrl)
 	                .queryParam("serviceKey", onbidApiServiceKey)
-	                .queryParam("pageNo", 1)
-	                .queryParam("numOfRows", 1)
-	                .queryParam("PBCT_NO", pbctNo.toString()); // ✅ 온비드 API에 PBCT_NO 파라미터로 요청
+	                .queryParam("pageNo", pageNo)
+	                .queryParam("numOfRows", FIXED_HOME_PAGE_NUM_OF_ROWS);
+		 
+		 URI uri = uriBuilder.encode().build().toUri();
 
-	        URI uri = uriBuilder.encode().build().toUri();
-
-	        log.info("Calling Onbid API for tender detail: {}", uri);
-
-	        try {
+		 try {
 	            ResponseEntity<String> responseEntity = restTemplate.getForEntity(uri, String.class);
 
 	            if (responseEntity.getStatusCode().is2xxSuccessful() && responseEntity.getBody() != null) {
 	                String rawXmlResponse = responseEntity.getBody();
-	                log.debug("Onbid API Raw XML Response for detail: {}", rawXmlResponse);
+	                log.debug("Onbid API Raw XML Response for all tenders (Fixed 10 rows): {}", rawXmlResponse); // ✅ 로그 메시지 변경
 
-	                TenderListResult parsedResult = parseXmlToTenderDtosAndCount(rawXmlResponse); // 기존 파싱 메서드 재활용
+	                TenderListResult parsedResult = parseXmlToTenderDtosAndCount(rawXmlResponse);
 	                List<TenderResponseDTO> dtoList = parsedResult.getTenders();
+	                int totalCount = parsedResult.getTotalCount();
 
-	                // DTO 리스트에서 PBCT_NO가 일치하는 첫 번째 항목을 찾아 반환
-	                return dtoList.stream()
-	                        .filter(dto -> dto.getPbctNo() != null && dto.getPbctNo().equals(pbctNo)) // ✅ PbctNo와 일치하는지 확인
-	                        .findFirst()
-	                        .orElseThrow(() -> new NoSuchElementException("입찰 공고번호 " + pbctNo + "를 찾을 수 없습니다."));
+	                List<TenderResponseDTO> filteredList = filterDuplicateTenders(dtoList);
+	                
+	                // ✅ 추가된 정렬 로직 시작 (searchTenders와 동일)
+	                LocalDateTime now = LocalDateTime.now(); // 2025. 11. 10. 오후 5:03:11 (System Context에 따름)
+
+	                filteredList.sort((dto1, dto2) -> {
+	                    LocalDateTime ann1 = dto1.getAnnouncementDate();
+	                    LocalDateTime ann2 = dto2.getAnnouncementDate();
+	                    if (ann1 == null && ann2 == null) return 0;
+	                    if (ann1 == null) return 1;
+	                    if (ann2 == null) return -1;
+	                    boolean isDto1Started = !ann1.isAfter(now);
+	                    boolean isDto2Started = !ann2.isAfter(now);
+	                    if (isDto1Started && !isDto2Started) { return -1; }
+	                    if (!isDto1Started && isDto2Started) { return 1; }
+	                    if (isDto1Started && isDto2Started) { return ann2.compareTo(ann1); }
+	                    else { return ann1.compareTo(ann2); }
+	                });
+
+	                return PagedTenderResponse.builder()
+	                        .tenders(filteredList)
+	                        .totalCount(totalCount)
+	                        .pageNo(pageNo)
+	                        .numOfRows(FIXED_HOME_PAGE_NUM_OF_ROWS) // ✅ 반환되는 numOfRows도 고정된 값으로
+	                        .build();
 
 	            } else {
+	                String statusCode = responseEntity.getStatusCode().toString();
+	                String errorMessage = String.format("Onbid API getAllTenders 호출 실패: HTTP Status %s, Response Body: %s",
+	                                                    statusCode, responseEntity.getBody());
+	                log.error(errorMessage);
+	                throw new RuntimeException(errorMessage);
+	            }
+	        } catch (Exception e) {
+	            log.error("온비드 입찰 정보를 불러오는데 실패했습니다 (getAllTenders): {}", e.getMessage(), e);
+	            throw new RuntimeException("온비드 입찰 정보를 불러오는데 실패했습니다.", e);
+	        } 
+	}
+	
+	public TenderResponseDTO getTenderDetail(String cltrMnmtNo) { // ✅ 파라미터 이름 cltrMnmtNo로, 타입은 String으로 변경
+        long startTime = System.currentTimeMillis();
+
+        UriComponentsBuilder uriBuilder = UriComponentsBuilder.fromUriString(onbidApiBaseUrl)
+                .queryParam("serviceKey", onbidApiServiceKey)
+                .queryParam("pageNo", 1)
+                .queryParam("numOfRows", 100) // ✅ 충분히 많은 건수를 요청하여 필터링
+                .queryParam("CLTR_MNMT_NO", cltrMnmtNo); // ✅ 온비드 API에 CLTR_MNMT_NO 파라미터로 요청
+
+        URI uri = uriBuilder.encode().build().toUri();
+
+        log.info("Calling Onbid API for tender detail with CLTR_MNMT_NO: {}", uri);
+
+        try {
+            ResponseEntity<String> responseEntity = restTemplate.getForEntity(uri, String.class);
+
+            if (responseEntity.getStatusCode().is2xxSuccessful() && responseEntity.getBody() != null) {
+                String rawXmlResponse = responseEntity.getBody();
+                log.debug("Onbid API Raw XML Response for detail (CLTR_MNMT_NO query): {}", rawXmlResponse);
+
+                TenderListResult parsedResult = parseXmlToTenderDtosAndCount(rawXmlResponse);
+                List<TenderResponseDTO> dtoList = parsedResult.getTenders();
+
+                // ✅ (핵심) 받아온 DTO 리스트에서 요청한 cltrMnmtNo와 정확히 일치하는 DTO를 필터링
+                return dtoList.stream()
+                        .filter(dto -> dto.getCltrMnmtNo() != null && dto.getCltrMnmtNo().equals(cltrMnmtNo))
+                        .findFirst()
+                        .orElseThrow(() -> new NoSuchElementException("온비드 API 응답에서 물건관리번호 " + cltrMnmtNo + "를 찾았지만, 필터링 후 일치하는 항목을 찾을 수 없습니다."));
+
+            } else {
 	                String statusCode = responseEntity.getStatusCode().toString();
 	                String errorMessage = String.format("Onbid API 상세 조회 호출 실패: HTTP Status %s, Response Body: %s",
 	                                                    statusCode, responseEntity.getBody());
@@ -284,17 +311,7 @@ public class TenderService {
 
 	public PagedTenderResponse searchTenders(String cltrNm, String dpslMtdCd, String sido, String sgk, String emd,
 			String goodsPriceFrom, String goodsPriceTo, String openPriceFrom, String openPriceTo, String pbctBegnDtm,
-			String pbctClsDtm, int pageNo, int numOfRows) {
-
-		long startTime = System.currentTimeMillis();
-		
-		// ✅ 1단계: 프론트엔드에서 넘어온 검색 조건 로그
-        log.info("Received search parameters - cltrNm: '{}', dpslMtdCd: '{}', sido: '{}', sgk: '{}', emd: '{}'",
-                 cltrNm, dpslMtdCd, sido, sgk, emd);
-        log.info("Received search prices - goodsPriceFrom: '{}', goodsPriceTo: '{}', openPriceFrom: '{}', openPriceTo: '{}'",
-                 goodsPriceFrom, goodsPriceTo, openPriceFrom, openPriceTo);
-        log.info("Received search dates - pbctBegnDtm: '{}', pbctClsDtm: '{}'", pbctBegnDtm, pbctClsDtm);
-        log.info("Received paging - pageNo: {}, numOfRows: {}", pageNo, numOfRows);
+			String pbctClsDtm, int pageNo, int numOfRows) {	
 
 		UriComponentsBuilder uriBuilder = UriComponentsBuilder.fromUriString(onbidApiBaseUrl)
 				.queryParam("serviceKey", onbidApiServiceKey).queryParam("pageNo", pageNo)
@@ -326,22 +343,47 @@ public class TenderService {
 
 		URI uri = uriBuilder.encode().build().toUri();
 
-		log.info("Calling Onbid API for detailed search: {}", uri);
-
 		try {
             ResponseEntity<String> responseEntity = restTemplate.getForEntity(uri, String.class);
 
             if (responseEntity.getStatusCode().is2xxSuccessful() && responseEntity.getBody() != null) {
                 String rawXmlResponse = responseEntity.getBody();
-//                log.debug("Onbid API Raw XML Response for search: {}", rawXmlResponse);
-                // ✅ XML 파싱 결과를 TenderListResult 객체로 받음
                 TenderListResult parsedResult = parseXmlToTenderDtosAndCount(rawXmlResponse);
                 List<TenderResponseDTO> dtoList = parsedResult.getTenders(); // 실제 DTO 목록
                 int totalCount = parsedResult.getTotalCount(); // 총 건수
 
                 List<TenderResponseDTO> filteredList = filterDuplicateTenders(dtoList); // 중복 제거 필터링
+                
+                LocalDateTime now = LocalDateTime.now();
+                
+                filteredList.sort((dto1, dto2) -> {
+                    LocalDateTime ann1 = dto1.getAnnouncementDate();
+                    LocalDateTime ann2 = dto2.getAnnouncementDate();
 
-                log.info("상세 검색 결과 (필터링 후): {}건, 총 건수: {}", filteredList.size(), totalCount);
+                    // 둘 중 하나라도 날짜가 null이면 다른 하나를 우선 (null이 뒤로 가게)
+                    if (ann1 == null && ann2 == null) return 0;
+                    if (ann1 == null) return 1; // dto1이 null이면 뒤로 보냄
+                    if (ann2 == null) return -1; // dto2가 null이면 뒤로 보냄
+
+                    boolean isDto1Started = !ann1.isAfter(now); // ann1 <= now
+                    boolean isDto2Started = !ann2.isAfter(now); // ann2 <= now
+
+                    // 1. dto1이 시작되었고 dto2가 아직 시작되지 않았다면, dto1이 우선 (음수 반환)
+                    if (isDto1Started && !isDto2Started) {
+                        return -1;
+                    }
+                    // 2. dto2가 시작되었고 dto1이 아직 시작되지 않았다면, dto2가 우선 (양수 반환)
+                    if (!isDto1Started && isDto2Started) {
+                        return 1;
+                    }
+                    // 3. 둘 다 시작되었거나 둘 다 아직 시작되지 않았다면,
+                    //    시작된 공고는 최신순 (내림차순), 시작되지 않은 공고는 빠른 시작일 순 (오름차순)으로 정렬
+                    if (isDto1Started && isDto2Started) { // 둘 다 시작된 공고
+                        return ann2.compareTo(ann1); // 최신순 (내림차순)
+                    } else { // 둘 다 시작되지 않은 공고
+                        return ann1.compareTo(ann2); // 빠른 시작일 순 (오름차순)
+                    }
+                });
                 
                 // ✅ PagedTenderResponse 객체로 묶어서 반환
                 return PagedTenderResponse.builder()
@@ -363,7 +405,6 @@ public class TenderService {
             throw new RuntimeException("온비드 입찰 정보를 불러오는데 실패했습니다.", e);
         } finally {
         	long endTime = System.currentTimeMillis();
-            log.info("searchTenders 메서드 총 실행 시간: {}ms", (endTime - startTime));
         }
     }
 

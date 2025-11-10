@@ -1,28 +1,21 @@
 import { createSlice, createAsyncThunk } from '@reduxjs/toolkit';
 
+const HOME_PAGE_NUM_OF_ROWS = 10;
+
 export const fetchTenders = createAsyncThunk(
     'tenders/fetchTenders',
-    async (_, { rejectWithValue }) => {
-        try {
-            const response = await fetch('http://localhost:8080/api/tenders');
-
-            if (!response.ok) {
-                const errorDetail = await response.json().catch(() => ({
-                    message: `서버 오류 발생 : ${response.status}`,
-                    statusCode: response.status
-                }));
-
-                return rejectWithValue(errorDetail.message  || `HTTP error! status : ${response.status}`);
-            }
-
-            const data = await response.json();
-            console.log(data);
-            return data;
-            
-        } catch (error) {
-            console.error("공공 API 호출 중 오류 발생:", error);
-            return rejectWithValue(error.message || "공공 입찰 정보를 불러오는데 실패했습니다. (네트워크 또는 CORS)");
+    async ({ pageNo = 1 } = {}) => {
+        // ✅ numOfRows를 고정된 값으로 사용
+        const response = await fetch(`http://localhost:8080/api/tenders?pageNo=${pageNo}&numOfRows=${HOME_PAGE_NUM_OF_ROWS}`);
+        
+        
+        if (!response.ok) {
+            const errorText = await response.text();
+            throw new Error(`HTTP error! status: ${response.status} - ${errorText}`);
         }
+        const data = await response.json();
+        console.log(data);
+        return data;
     }
 );
 
@@ -32,9 +25,14 @@ const tenderSlice = createSlice({
         bids: [],
         status: 'idle', // 'idle' | 'loading' | 'succeeded' | 'failed'
         error: null,
+        currentPage: 1,   // ✅ 현재 페이지 번호
+        totalCount: 0,    // ✅ 전체 입찰 수
+        numOfRows: HOME_PAGE_NUM_OF_ROWS,
     },
     reducers: {
-
+        setCurrentPageRedux: (state, action) => {
+            state.currentPage = action.payload;
+        },
     },
 
     extraReducers: (builder) => {
@@ -46,8 +44,17 @@ const tenderSlice = createSlice({
                 state.error = null;
             })
             .addCase(fetchTenders.fulfilled, (state, action) => {
-                state.status = 'succeeded';
-                state.bids = action.payload; // API로부터 받은 데이터를 bids에 저장
+                if (action.payload) {
+                    state.bids = action.payload.tenders || [];
+                    state.totalCount = action.payload.totalCount; // ✅ 전체 count는 백엔드에서 받은 값 그대로 사용
+                    state.currentPage = action.payload.pageNo;
+                    state.numOfRows = HOME_PAGE_NUM_OF_ROWS; // ✅ numOfRows는 고정값 유지
+                } else {
+                    state.bids = [];
+                    state.totalCount = 0;
+                    state.currentPage = 1;
+                    state.numOfRows = HOME_PAGE_NUM_OF_ROWS;
+                }
             })
             .addCase(fetchTenders.rejected, (state, action) => {
                 state.status = 'failed';
@@ -56,4 +63,5 @@ const tenderSlice = createSlice({
     },
 });
 
+export const { setCurrentPageRedux } = tenderSlice.actions;
 export default tenderSlice.reducer;

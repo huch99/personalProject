@@ -422,8 +422,8 @@ const DetailSearchPage = () => {
                 {searchResults.length === 0 && !loading && !error && <p>검색 결과가 없습니다.</p>}
 
                 {searchResults.map((item) => (
-                    <ResultItem key={item.pbctNo}
-                      onClick={() => navigate(`/tenders/${item.pbctNo}`)}
+                    <ResultItem key={item.tenderId}
+                      onClick={() => navigate(`/tenders/${item.cltrMnmtNo}`)}
                       style={{ cursor: 'pointer' }}
                     > {/* 고유 키 사용 */}
                         <h3>{item.tenderTitle}</h3>

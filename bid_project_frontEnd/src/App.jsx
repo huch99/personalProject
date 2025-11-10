@@ -23,7 +23,7 @@ function App() {
           <Route path="/search" element={<Layout><DetailSearchPage /></Layout>}/>
 
           {/* 공매물 루트 */}
-          <Route path="/tenders/:tenderId" element={<Layout> <TenderDetailPage /> </Layout>} />
+          <Route path="/tenders/:cltrMnmtNo" element={<Layout> <TenderDetailPage /> </Layout>} />
 
           {/* 게시판 루트 */}
           <Route path="/faq" element={<Layout><FaqBoard /></Layout>} />
