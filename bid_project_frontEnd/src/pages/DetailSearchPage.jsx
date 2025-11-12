@@ -1,34 +1,38 @@
-import React, { useEffect, useRef, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
+import { useDispatch, useSelector } from 'react-redux';
+import { useLocation, useNavigate } from 'react-router-dom';
 import styled from 'styled-components';
+import { setCurrentPageRedux, fetchSearchTenders, setNumOfRowsRedux, fetchFavoriteTenderIds, toggleFavorite } from '../features/tenders/tenderSlicce';
+import { FaStar } from 'react-icons/fa';
 
 const SearchPageContainer = styled.div`
   max-width: 1200px;
   margin: 40px auto;
-  padding: 25px;
-  background-color: #fff;
-  border-radius: 10px;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+  padding: 30px;
+  background-color: #f9fbfd;
+  border-radius: 12px;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
+  font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
 `;
 
 const SearchTitle = styled.h2`
-  color: #333;
-  margin-bottom: 25px;
-  border-bottom: 2px solid #eee;
-  padding-bottom: 10px;
-  font-size: 28px;
+  color: #2c3e50;
+  margin-bottom: 30px;
+  border-bottom: 3px solid #3498db;
+  padding-bottom: 15px;
+  font-size: 32px;
   text-align: center;
 `;
 
 const SearchForm = styled.form`
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
-  gap: 20px;
-  margin-bottom: 30px;
-  padding: 20px;
-  border: 1px solid #e0e0e0;
-  border-radius: 8px;
-  background-color: #f9f9f9;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 25px;
+  padding: 25px;
+  background-color: #ffffff;
+  border-radius: 10px;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.05);
+  margin-bottom: 40px;
 `;
 
 const FormGroup = styled.div`
@@ -37,62 +41,83 @@ const FormGroup = styled.div`
 `;
 
 const Label = styled.label`
+  font-weight: 600;
   margin-bottom: 8px;
-  font-weight: bold;
-  color: #555;
+  color: #34495e;
+  font-size: 15px;
 `;
 
 const Input = styled.input`
-  padding: 10px 12px;
-  border: 1px solid #ccc;
-  border-radius: 4px;
-  font-size: 16px;
+  padding: 12px 14px;
+  border: 1px solid #ced4da;
+  border-radius: 6px;
+  font-size: 15px;
+  color: #495057;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
 
   &:focus {
-    outline: none;
     border-color: #007bff;
-    box-shadow: 0 0 0 2px rgba(0, 123, 255, 0.25);
+    box-shadow: 0 0 0 3px rgba(0, 123, 255, 0.25);
+    outline: none;
   }
 `;
 
 const Select = styled.select`
-  padding: 10px 12px;
-  border: 1px solid #ccc;
-  border-radius: 4px;
-  font-size: 16px;
-  background-color: white;
+  padding: 12px 14px;
+  border: 1px solid #ced4da;
+  border-radius: 6px;
+  font-size: 15px;
+  color: #495057;
+  background-color: #fff;
+  appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath fill='%236c757d' d='M7 10l5 5 5-5H7z'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 10px center;
+  background-size: 16px;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
 
   &:focus {
-    outline: none;
     border-color: #007bff;
-    box-shadow: 0 0 0 2px rgba(0, 123, 255, 0.25);
+    box-shadow: 0 0 0 3px rgba(0, 123, 255, 0.25);
+    outline: none;
   }
 `;
 
 const RangeInputGroup = styled.div`
   display: flex;
   align-items: center;
-  gap: 10px;
 
   ${Input} {
     flex: 1;
+    margin-right: 10px;
+  }
+
+  span {
+    margin: 0 5px;
+    color: #6c757d;
+  }
+
+  ${Input}:last-child {
+    margin-right: 0;
   }
 `;
 
 const SearchButton = styled.button`
-  grid-column: 1 / -1; /* 폼 전체 너비 사용 */
+  grid-column: 1 / -1;
+  padding: 15px 25px;
   background-color: #007bff;
   color: white;
-  padding: 12px 25px;
   border: none;
-  border-radius: 5px;
-  cursor: pointer;
+  border-radius: 8px;
   font-size: 18px;
-  transition: background-color 0.2s ease;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background-color 0.2s ease, box-shadow 0.2s ease;
   margin-top: 20px;
 
   &:hover {
     background-color: #0056b3;
+    box-shadow: 0 4px 15px rgba(0, 123, 255, 0.3);
   }
 
   &:disabled {
@@ -102,61 +127,80 @@ const SearchButton = styled.button`
 `;
 
 const ResultList = styled.div`
-  margin-top: 30px;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+  gap: 25px;
+  margin-top: 40px;
 `;
 
 const ResultItem = styled.div`
-  background-color: #f0f8ff;
-  border: 1px solid #e0e0e0;
-  border-radius: 8px;
-  padding: 15px 20px;
-  margin-bottom: 15px;
+  background-color: #ffffff;
+  padding: 20px;
+  border-radius: 10px;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.05);
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+  position: relative; // ✅ FavoriteIcon 배치를 위해 추가
+
+  &:hover {
+    transform: translateY(-5px);
+    box-shadow: 0 6px 15px rgba(0, 0, 0, 0.1);
+  }
 
   h3 {
-    color: #333;
-    margin-bottom: 5px;
+    color: #34495e;
+    font-size: 20px;
+    margin-bottom: 15px;
+    border-bottom: 1px solid #eee;
+    padding-bottom: 10px;
   }
 
   p {
-    color: #666;
+    color: #555;
     font-size: 14px;
-    margin-bottom: 3px;
+    line-height: 1.5;
+    margin-bottom: 5px;
   }
-`;
 
-const ErrorMessage = styled.p`
-  color: red;
-  text-align: center;
-  font-size: 16px;
-  margin-top: 20px;
+  strong {
+    color: #333;
+  }
 `;
 
 const LoadingMessage = styled.p`
   text-align: center;
-  font-size: 16px;
-  color: #555;
-  margin-top: 20px;
+  font-size: 18px;
+  color: #6c757d;
+  margin-top: 50px;
+`;
+
+const ErrorMessage = styled.p`
+  text-align: center;
+  font-size: 18px;
+  color: #dc3545;
+  margin-top: 50px;
 `;
 
 const PaginationContainer = styled.div`
   display: flex;
   justify-content: center;
   align-items: center;
-  margin-top: 30px;
-  gap: 5px;
+  margin-top: 40px;
+  gap: 8px;
 `;
 
 const PageButton = styled.button`
-  background-color: ${(props) => (props.active ? '#007bff' : '#f8f9fa')};
+  padding: 10px 15px;
+  background-color: ${(props) => (props.active ? '#007bff' : '#f0f2f5')};
   color: ${(props) => (props.active ? 'white' : '#495057')};
-  border: 1px solid #dee2e6;
-  padding: 8px 12px;
-  border-radius: 4px;
+  border: 1px solid #ced4da;
+  border-radius: 5px;
+  font-size: 15px;
   cursor: pointer;
-  transition: background-color 0.2s ease, color 0.2s ease;
+  transition: background-color 0.2s ease, color 0.2s ease, border-color 0.2s ease;
 
   &:hover:not(:disabled) {
     background-color: ${(props) => (props.active ? '#0056b3' : '#e2e6ea')};
+    border-color: ${(props) => (props.active ? '#0056b3' : '#dae0e5')};
   }
 
   &:disabled {
@@ -165,304 +209,368 @@ const PageButton = styled.button`
   }
 `;
 
+const FavoriteIcon = styled.div`
+  position: absolute;
+  top: 15px;
+  right: 15px;
+  cursor: pointer;
+  color: ${props => props.isFavorite ? '#FFD700' : '#cccccc'}; // 노란색 or 회색
+  font-size: 24px;
+  transition: transform 0.2s ease;
+
+  &:hover {
+    transform: scale(1.1);
+  }
+`;
+
 const DetailSearchPage = () => {
-    const navigate = useNavigate();
+  const navigate = useNavigate();
+  const location = useLocation();
+  const dispatch = useDispatch();
 
-    // 검색 조건 상태
-    const [searchTerm, setSearchTerm] = useState(''); // 물건명 (CLTR_NM)
-    const [dpslMtdCd, setDpslMtdCd] = useState(''); // 처분방식코드 (DPSL_MTD_CD)
-    const [sido, setSido] = useState(''); // 물건소재지 (시도)
-    const [sgk, setSgk] = useState(''); // 물건소재지 (시군구)
-    const [emd, setEmd] = useState(''); // 물건소재지 (읍면동)
-    const [minAppraisalPrice, setMinAppraisalPrice] = useState(''); // 감정가 하한
-    const [maxAppraisalPrice, setMaxAppraisalPrice] = useState(''); // 감정가 상한
-    const [minBidPrice, setMinBidPrice] = useState(''); // 최저입찰가 하한
-    const [maxBidPrice, setMaxBidPrice] = useState(''); // 최저입찰가 상한
-    const [startDate, setStartDate] = useState(''); // 입찰일자 From
-    const [endDate, setEndDate] = useState(''); // 입찰일자 To
+  const bids = useSelector((state) => state.tenders.bids);
+  const status = useSelector((state) => state.tenders.status);
+  const error = useSelector((state) => state.tenders.error);
+  const currentPage = useSelector((state) => state.tenders.currentPage);
+  const totalCount = useSelector((state) => state.tenders.totalCount);
+  const numOfRows = useSelector((state) => state.tenders.numOfRows);
+  const favoriteTenderIds = useSelector((state) => state.tenders.favoriteTenderIds);
 
-    // 결과 및 로딩 상태
-    const [searchResults, setSearchResults] = useState([]);
-    const [loading, setLoading] = useState(false);
-    const [error, setError] = useState(null);
+  const [cltrNm, setCltrNm] = useState('');
+  const [dpslMtdCd, setDpslMtdCd] = useState('');
+  const [sido, setSido] = useState('');
+  const [sgk, setSgk] = useState('');
+  const [emd, setEmd] = useState('');
+  const [minAppraisalPrice, setMinAppraisalPrice] = useState('');
+  const [maxAppraisalPrice, setMaxAppraisalPrice] = useState('');
+  const [pbctBegnDtm, setPbctBegnDtm] = useState('');
+  const [pbctClsDtm, setPbctClsDtm] = useState('');
 
-    // ✅ 초기 렌더링 시 검색을 방지하기 위한 useRef (필요시 사용)
-    const isInitialMount = useRef(true);
+  const totalPages = Math.ceil(totalCount / numOfRows);
 
-    // 페이징 관련 상태
-    const [currentPage, setCurrentPage] = useState(1);
-    const [totalItems, setTotalItems] = useState(0);
-    const [itemsPerPage, setItemsPerPage] = useState(10);
+  const executeSearch = useCallback((page, currentNumOfRows, currentSearchParams) => {
+    page = page ?? 1;
+    currentNumOfRows = currentNumOfRows ?? 10;
 
-    useEffect(() => {
-        fetchSearchResults(currentPage, itemsPerPage);
-    }, [currentPage, itemsPerPage]); // currentPage 또는 itemsPerPage 변경 시 재검색
+    const params = new URLSearchParams();
 
-    // ✅ fetchSearchResults 함수가 검색 조건을 인자로 받도록 변경
-    const fetchSearchResults = async (page, rows) => { // ✅ 인자 목록 간소화
-    setLoading(true);
-    setError(null);
-    
-    try {
-      const queryParams = new URLSearchParams();
-      // ✅ 현재 컴포넌트의 useState 상태들을 사용
-      if (searchTerm) queryParams.append('cltrNm', searchTerm);
-      if (dpslMtdCd) queryParams.append('dpslMtdCd', dpslMtdCd);
-      if (sido) queryParams.append('sido', sido);
-      if (sgk) queryParams.append('sgk', sgk);
-      if (emd) queryParams.append('emd', emd);
-      if (minAppraisalPrice) queryParams.append('goodsPriceFrom', minAppraisalPrice);
-      if (maxAppraisalPrice) queryParams.append('goodsPriceTo', maxAppraisalPrice);
-      if (minBidPrice) queryParams.append('openPriceFrom', minBidPrice);
-      if (maxBidPrice) queryParams.append('openPriceTo', maxBidPrice);
-      if (startDate) queryParams.append('pbctBegnDtm', startDate.replace(/-/g, ''));
-      if (endDate) queryParams.append('pbctClsDtm', endDate.replace(/-/g, ''));
-      
-      queryParams.append('pageNo', page);
-      queryParams.append('numOfRows', rows);
+    if (currentSearchParams.cltrNm) params.append('cltrNm', currentSearchParams.cltrNm);
+    if (currentSearchParams.dpslMtdCd) params.append('dpslMtdCd', currentSearchParams.dpslMtdCd);
+    if (currentSearchParams.sido) params.append('sido', currentSearchParams.sido);
+    if (currentSearchParams.sgk) params.append('sgk', currentSearchParams.sgk);
+    if (currentSearchParams.emd) params.append('emd', currentSearchParams.emd);
+
+    if (currentSearchParams.minAppraisalPrice) params.append('goodsPriceFrom', currentSearchParams.minAppraisalPrice);
+    if (currentSearchParams.maxAppraisalPrice) params.append('goodsPriceTo', currentSearchParams.maxAppraisalPrice);
+
+    if (currentSearchParams.pbctBegnDtm) params.append('pbctBegnDtm', pbctBegnDtm);
+    if (currentSearchParams.pbctClsDtm) params.append('pbctClsDtm', pbctClsDtm);
+
+    params.append('pageNo', page.toString());
+    params.append('numOfRows', currentNumOfRows.toString());
+
+    navigate(`/search?${params.toString()}`);
+
+    dispatch(fetchSearchTenders({
+      cltrNm: currentSearchParams.cltrNm,
+      dpslMtdCd: currentSearchParams.dpslMtdCd,
+      sido: currentSearchParams.sido,
+      sgk: currentSearchParams.sgk,
+      emd: currentSearchParams.emd,
+      goodsPriceFrom: currentSearchParams.minAppraisalPrice,
+      goodsPriceTo: currentSearchParams.maxAppraisalPrice,
+      pbctBegnDtm: currentSearchParams.pbctBegnDtm,
+      pbctClsDtm: currentSearchParams.pbctClsDtm,
+      pageNo: page.toString(),
+      numOfRows: currentNumOfRows.toString(),
+    }));
+
+  }, [navigate, dispatch, pbctBegnDtm, pbctClsDtm]);
 
 
-      const response = await fetch(`http://localhost:8080/api/tenders/search?${queryParams.toString()}`);
+  useEffect(() => {
+    const currentParams = new URLSearchParams(location.search);
+    setCltrNm(currentParams.get('cltrNm') || '');
+    setDpslMtdCd(currentParams.get('dpslMtdCd') || '');
+    setSido(currentParams.get('sido') || '');
+    setSgk(currentParams.get('sgk') || '');
+    setEmd(currentParams.get('emd') || '');
+    setMinAppraisalPrice(currentParams.get('goodsPriceFrom') || '');
+    setMaxAppraisalPrice(currentParams.get('goodsPriceTo') || '');
+    setPbctBegnDtm(currentParams.get('pbctBegnDtm') || '');
+    setPbctClsDtm(currentParams.get('pbctClsDtm') || '');
 
+    const urlPage = parseInt(currentParams.get('pageNo') || '1', 10);
+    const urlNumOfRows = parseInt(currentParams.get('numOfRows') || '10', 10);
 
-      if (!response.ok) {
-        const errorText = await response.text();
-        throw new Error(`HTTP error! status: ${response.status} - ${errorText}`);
-      }
-
-      const pagedResponse = await response.json(); 
-      setSearchResults(pagedResponse.tenders || []); 
-      setTotalItems(pagedResponse.totalCount || 0);
-      setCurrentPage(pagedResponse.pageNo || 1);
-      setItemsPerPage(pagedResponse.numOfRows || 10);
-
-    } catch (err) {
-      setError(err.message || '검색 중 오류가 발생했습니다.');
-      console.error("Failed to fetch detailed search results:", err);
-      setSearchResults([]); 
-      setTotalItems(0);     
-    } finally {
-      setLoading(false);
+    if (urlNumOfRows !== numOfRows) {
+      dispatch(setNumOfRowsRedux(urlNumOfRows));
     }
-  };
 
-    // ✅ useEffect: currentPage 또는 itemsPerPage 변경 시 자동으로 검색
-    useEffect(() => {
-    // 최초 렌더링 시에는 검색하지 않고, 페이지네이션 변경 시에만 검색
-    if (currentPage !== 1 || totalItems > 0) { // totalItems > 0 조건은 검색결과가 있을 때만 페이지 이동으로 api 호출하게
-        fetchSearchResults(currentPage, itemsPerPage);
-    } else { // 페이지가 1이거나 검색 전이라면 초기 검색 (빈 값으로 한번 호출)
-        fetchSearchResults(1, itemsPerPage);
+    if (urlPage !== currentPage) {
+      dispatch(setCurrentPageRedux(urlPage));
     }
-    // 이펙트의 의존성 배열에서 검색 조건 상태값들을 모두 제거
-  }, [currentPage, itemsPerPage]); // ✅ 의존성 배열 간소화
 
-  // ✅ handleSubmit은 검색 버튼 클릭 시 currentPage를 1로 재설정하고, 즉시 fetchSearchResults 호출
-  const handleSearch = (e) => {
+
+    const currentSearchParams = {
+      cltrNm: currentParams.get('cltrNm') || '',
+      dpslMtdCd: currentParams.get('dpslMtdCd') || '',
+      sido: currentParams.get('sido') || '',
+      sgk: currentParams.get('sgk') || '',
+      emd: currentParams.get('emd') || '',
+      minAppraisalPrice: currentParams.get('goodsPriceFrom') || '',
+      maxAppraisalPrice: currentParams.get('goodsPriceTo') || '',
+      pbctBegnDtm: currentParams.get('pbctBegnDtm') || '',
+      pbctClsDtm: currentParams.get('pbctClsDtm') || '',
+    };
+
+    if (urlPage !== currentPage || urlNumOfRows !== numOfRows || (location.search && currentParams.toString() !== location.search.substring(1))) {
+      executeSearch(urlPage, urlNumOfRows, currentSearchParams);
+    } else if (!location.search) {
+      executeSearch(urlPage, urlNumOfRows, currentSearchParams);
+    }
+
+    dispatch(fetchFavoriteTenderIds());
+  }, [location.search, dispatch, executeSearch, currentPage, numOfRows]);
+
+
+  const handleSearch = useCallback((e) => {
     e.preventDefault();
-    setCurrentPage(1); // 검색 조건 변경 시 무조건 1페이지부터
-    fetchSearchResults(1, itemsPerPage); // ✅ 현재 입력된 검색 조건으로 즉시 검색
-  };
+    const currentSearchParams = {
+      cltrNm, dpslMtdCd, sido, sgk, emd,
+      minAppraisalPrice, maxAppraisalPrice,
+      pbctBegnDtm, pbctClsDtm,
+    };
 
-    // ✅ 페이지네이션 관련 계산
-    const totalPages = Math.ceil(totalItems / itemsPerPage);
-    const pageNumbers = [];
-    const maxPageButtons = 10; // 화면에 보여줄 최대 페이지 버튼 수
-    let startPage = Math.max(1, currentPage - Math.floor(maxPageButtons / 2));
-    let endPage = Math.min(totalPages, startPage + maxPageButtons - 1);
+    executeSearch(1, numOfRows, currentSearchParams);
 
-    if (endPage - startPage + 1 < maxPageButtons) {
-        startPage = Math.max(1, endPage - maxPageButtons + 1);
+  }, [cltrNm, dpslMtdCd, sido, sgk, emd, minAppraisalPrice, maxAppraisalPrice,
+    pbctBegnDtm, pbctClsDtm, numOfRows, dispatch, executeSearch]);
+
+  const handleItemsPerPageChange = useCallback((e) => {
+    const newNumOfRows = Number(e.target.value);
+    const currentSearchParams = {
+      cltrNm, dpslMtdCd, sido, sgk, emd,
+      minAppraisalPrice, maxAppraisalPrice,
+      pbctBegnDtm, pbctClsDtm,
+    };
+
+    executeSearch(1, newNumOfRows, currentSearchParams);
+
+  }, [cltrNm, dpslMtdCd, sido, sgk, emd, minAppraisalPrice, maxAppraisalPrice,
+    pbctBegnDtm, pbctClsDtm, dispatch, executeSearch]);
+
+  const handlePageChange = useCallback((page) => {
+    if (page < 1 || page > totalPages) return;
+    const currentSearchParams = {
+      cltrNm, dpslMtdCd, sido, sgk, emd,
+      minAppraisalPrice, maxAppraisalPrice,
+      pbctBegnDtm, pbctClsDtm,
+    };
+
+    executeSearch(page, numOfRows, currentSearchParams);
+
+  }, [cltrNm, dpslMtdCd, sido, sgk, emd, minAppraisalPrice, maxAppraisalPrice,
+    pbctBegnDtm, pbctClsDtm, dispatch, executeSearch, totalPages, numOfRows]);
+
+
+  // ✅ 즐겨찾기 토글 핸들러
+  const handleToggleFavorite = useCallback((e, cltrMnmtNo, currentIsFavorite) => {
+    e.stopPropagation(); // ✅ 이벤트 버블링 방지 (아이템 클릭 -> 상세 페이지 이동 막기)
+    dispatch(toggleFavorite({ cltrMnmtNo, isFavorite: currentIsFavorite }));
+  }, [dispatch]);
+
+  let content;
+  const loading = status === 'loading';
+
+  if (loading) {
+    content = <LoadingMessage>검색 결과 로딩 중...</LoadingMessage>;
+  } else if (status === 'succeeded') {
+    if (bids && bids.length > 0) {
+      content = (
+        <ResultList>
+          {bids.map((item) => (
+            <ResultItem key={item.cltrMnmtNo}
+              onClick={() => navigate(`/tenders/${item.cltrMnmtNo}`)}
+              style={{ cursor: 'pointer' }}
+            >
+              <h3>{item.tenderTitle}</h3>
+              <p><strong>처분방식:</strong> {item.organization}</p>
+              <p><strong>공고번호:</strong> {item.pbctNo}</p>
+              <p><strong>물건관리번호:</strong> {item.cltrMnmtNo}</p>
+              <p><strong>입찰마감일:</strong> {item.deadline ? new Date(item.deadline).toLocaleString() : 'N/A'}</p>
+              
+              {/* ✅ 즐겨찾기 아이콘 */}
+              <FavoriteIcon 
+                isFavorite={favoriteTenderIds.includes(item.cltrMnmtNo)} // ID가 목록에 있으면 즐겨찾기 됨
+                onClick={(e) => handleToggleFavorite(e, item.cltrMnmtNo, favoriteTenderIds.includes(item.cltrMnmtNo))}
+              >
+                <FaStar />
+              </FavoriteIcon>
+            </ResultItem>
+          ))}
+        </ResultList>
+      );
+    } else {
+      content = <p>검색 결과가 없습니다.</p>;
     }
+  } else if (status === 'failed') {
+    content = <ErrorMessage>{error}</ErrorMessage>;
+  }
 
-    for (let i = startPage; i <= endPage; i++) {
-        pageNumbers.push(i);
-    }
+  const pageNumbers = [];
+  const maxPageButtons = 10;
+  let startPage = Math.max(1, currentPage - Math.floor(maxPageButtons / 2));
+  let endPage = Math.min(totalPages, startPage + maxPageButtons - 1);
+  if (endPage - startPage + 1 < maxPageButtons) {
+    startPage = Math.max(1, endPage - maxPageButtons + 1);
+  }
+  for (let i = startPage; i <= endPage; i++) {
+    pageNumbers.push(i);
+  }
 
-    return (
-        <SearchPageContainer>
-            <SearchTitle>입찰 상세 검색</SearchTitle>
+  return (
+    <SearchPageContainer>
+      <SearchTitle>입찰 상세 검색</SearchTitle>
 
-            <SearchForm onSubmit={handleSearch}>
-                <FormGroup>
-                    <Label htmlFor="searchTerm">물건명</Label>
-                    <Input
-                        id="searchTerm"
-                        type="text"
-                        value={searchTerm}
-                        onChange={(e) => setSearchTerm(e.target.value)}
-                        placeholder="물건명을 입력하세요."
-                    />
-                </FormGroup>
+      <SearchForm onSubmit={handleSearch}>
+        <FormGroup>
+          <Label htmlFor="cltrNm">물건명</Label>
+          <Input
+            id="cltrNm"
+            type="text"
+            value={cltrNm}
+            onChange={(e) => setCltrNm(e.target.value)}
+            placeholder="물건명을 입력하세요."
+          />
+        </FormGroup>
 
-                <FormGroup>
-                    <Label htmlFor="dpslMtdCd">처분방식</Label>
-                    <Select
-                        id="dpslMtdCd"
-                        value={dpslMtdCd}
-                        onChange={(e) => setDpslMtdCd(e.target.value)}
-                    >
-                        <option value="">전체</option>
-                        <option value="0001">매각</option>
-                        <option value="0002">임대</option>
-                        {/* 추가 처분방식 코드가 있다면 여기에 추가 */}
-                    </Select>
-                </FormGroup>
+        <FormGroup>
+          <Label htmlFor="dpslMtdCd">처분방식</Label>
+          <Select
+            id="dpslMtdCd"
+            value={dpslMtdCd}
+            onChange={(e) => setDpslMtdCd(e.target.value)}
+          >
+            <option value="">전체</option>
+            <option value="경쟁입찰">경쟁입찰</option>
+            <option value="수의계약">수의계약</option>
+          </Select>
+        </FormGroup>
 
-                <FormGroup>
-                    <Label htmlFor="sido">물건소재지 (시/도)</Label>
-                    <Input
-                        id="sido"
-                        type="text"
-                        value={sido}
-                        onChange={(e) => setSido(e.target.value)}
-                        placeholder="예: 서울특별시"
-                    />
-                </FormGroup>
+        <FormGroup>
+          <Label htmlFor="sido">물건소재지 (시/도)</Label>
+          <Input
+            id="sido"
+            type="text"
+            value={sido}
+            onChange={(e) => setSido(e.target.value)}
+            placeholder="예: 서울"
+          />
+        </FormGroup>
 
-                <FormGroup>
-                    <Label htmlFor="sgk">물건소재지 (시군구)</Label>
-                    <Input
-                        id="sgk"
-                        type="text"
-                        value={sgk}
-                        onChange={(e) => setSgk(e.target.value)}
-                        placeholder="예: 강남구"
-                    />
-                </FormGroup>
+        <FormGroup>
+          <Label htmlFor="sgk">물건소재지 (시군구)</Label>
+          <Input
+            id="sgk"
+            type="text"
+            value={sgk}
+            onChange={(e) => setSgk(e.target.value)}
+            placeholder="예: 강남구"
+          />
+        </FormGroup>
 
-                <FormGroup>
-                    <Label htmlFor="emd">물건소재지 (읍면동)</Label>
-                    <Input
-                        id="emd"
-                        type="text"
-                        value={emd}
-                        onChange={(e) => setEmd(e.target.value)}
-                        placeholder="예: 역삼동"
-                    />
-                </FormGroup>
+        <FormGroup>
+          <Label htmlFor="emd">물건소재지 (읍면동)</Label>
+          <Input
+            id="emd"
+            type="text"
+            value={emd}
+            onChange={(e) => setEmd(e.target.value)}
+            placeholder="예: 역삼동"
+          />
+        </FormGroup>
 
-                <FormGroup>
-                    <Label>감정가 (원)</Label>
-                    <RangeInputGroup>
-                        <Input
-                            type="number"
-                            value={minAppraisalPrice}
-                            onChange={(e) => setMinAppraisalPrice(e.target.value)}
-                            placeholder="최소"
-                        />
-                        <span>~</span>
-                        <Input
-                            type="number"
-                            value={maxAppraisalPrice}
-                            onChange={(e) => setMaxAppraisalPrice(e.target.value)}
-                            placeholder="최대"
-                        />
-                    </RangeInputGroup>
-                </FormGroup>
+        <FormGroup>
+          <Label>감정가 (원)</Label>
+          <RangeInputGroup>
+            <Input
+              type="number"
+              value={minAppraisalPrice}
+              onChange={(e) => setMinAppraisalPrice(e.target.value)}
+              placeholder="최소"
+            />
+            <span>~</span>
+            <Input
+              type="number"
+              value={maxAppraisalPrice}
+              onChange={(e) => setMaxAppraisalPrice(e.target.value)}
+              placeholder="최대"
+            />
+          </RangeInputGroup>
+        </FormGroup>
 
-                <FormGroup>
-                    <Label>최저입찰가 (원)</Label>
-                    <RangeInputGroup>
-                        <Input
-                            type="number"
-                            value={minBidPrice}
-                            onChange={(e) => setMinBidPrice(e.target.value)}
-                            placeholder="최소"
-                        />
-                        <span>~</span>
-                        <Input
-                            type="number"
-                            value={maxBidPrice}
-                            onChange={(e) => setMaxBidPrice(e.target.value)}
-                            placeholder="최대"
-                        />
-                    </RangeInputGroup>
-                </FormGroup>
+        <FormGroup>
+          <Label>입찰일자</Label>
+          <RangeInputGroup>
+            <Input
+              type="date"
+              value={pbctBegnDtm}
+              onChange={(e) => setPbctBegnDtm(e.target.value)}
+            />
+            <span>~</span>
+            <Input
+              type="date"
+              value={pbctClsDtm}
+              onChange={(e) => setPbctClsDtm(e.target.value)}
+            />
+          </RangeInputGroup>
+        </FormGroup>
 
-                <FormGroup>
-                    <Label>입찰일자</Label>
-                    <RangeInputGroup>
-                        <Input
-                            type="date"
-                            value={startDate}
-                            onChange={(e) => setStartDate(e.target.value)}
-                        />
-                        <span>~</span>
-                        <Input
-                            type="date"
-                            value={endDate}
-                            onChange={(e) => setEndDate(e.target.value)}
-                        />
-                    </RangeInputGroup>
-                </FormGroup>
+        <FormGroup>
+          <Label htmlFor="itemsPerPage">표시 개수</Label>
+          <Select
+            id="itemsPerPage"
+            value={numOfRows}
+            onChange={handleItemsPerPageChange}
+          >
+            <option value="10">10개</option>
+            <option value="20">20개</option>
+            <option value="50">50개</option>
+            <option value="100">100개</option>
+          </Select>
+        </FormGroup>
 
-                <FormGroup>
-                    <Label htmlFor="itemsPerPage">표시 개수</Label>
-                    <Select
-                        id="itemsPerPage"
-                        value={itemsPerPage}
-                        onChange={(e) => setItemsPerPage(Number(e.target.value))}
-                    >
-                        <option value="10">10개</option>
-                        <option value="20">20개</option>
-                        <option value="50">50개</option>
-                        <option value="100">100개</option>
-                    </Select>
-                </FormGroup>
+        <SearchButton type="submit" disabled={loading}>
+          {loading ? '검색 중...' : '검색'}
+        </SearchButton>
+      </SearchForm>
 
-                <SearchButton type="submit" disabled={loading}>
-                    {loading ? '검색 중...' : '검색'}
-                </SearchButton>
-            </SearchForm>
+      {content}
 
-            <ResultList>
-                {loading && <LoadingMessage>검색 결과 로딩 중...</LoadingMessage>}
-                {error && <ErrorMessage>{error}</ErrorMessage>}
-                {searchResults.length === 0 && !loading && !error && <p>검색 결과가 없습니다.</p>}
-
-                {searchResults.map((item) => (
-                    <ResultItem key={item.tenderId}
-                      onClick={() => navigate(`/tenders/${item.cltrMnmtNo}`)}
-                      style={{ cursor: 'pointer' }}
-                    > {/* 고유 키 사용 */}
-                        <h3>{item.tenderTitle}</h3>
-                        <p><strong>처분방식:</strong> {item.organization}</p>
-                        <p><strong>공고번호:</strong> {item.tenderId}</p>
-                        <p><strong>물건관리번호:</strong> {item.cltrMnmtNo}</p>
-                        <p><strong>입찰마감일:</strong> {item.deadline ? new Date(item.deadline).toLocaleDateString() : 'N/A'}</p>
-                        {/* 추가 정보 표시 가능 */}
-                    </ResultItem>
-                ))}
-            </ResultList>
-            {/* ✅ 페이지네이션 UI */}
-            {!loading && !error && totalPages > 1 && (
-                <PaginationContainer>
-                    <PageButton onClick={() => setCurrentPage(1)} disabled={currentPage === 1}>
-                        {'<<'}
-                    </PageButton>
-                    <PageButton onClick={() => setCurrentPage(currentPage - 1)} disabled={currentPage === 1}>
-                        {'<'}
-                    </PageButton>
-                    {pageNumbers.map((page) => (
-                        <PageButton
-                            key={page}
-                            onClick={() => setCurrentPage(page)}
-                            active={page === currentPage}
-                        >
-                            {page}
-                        </PageButton>
-                    ))}
-                    <PageButton onClick={() => setCurrentPage(currentPage + 1)} disabled={currentPage === totalPages}>
-                        {'>'}
-                    </PageButton>
-                    <PageButton onClick={() => setCurrentPage(totalPages)} disabled={currentPage === totalPages}>
-                        {'>>'}
-                    </PageButton>
-                </PaginationContainer>
-            )}
-        </SearchPageContainer>
-    );
+      {!loading && !error && totalPages > 1 && (
+        <PaginationContainer>
+          <PageButton onClick={() => handlePageChange(1)} disabled={currentPage === 1}>
+            {'<<'}
+          </PageButton>
+          <PageButton onClick={() => handlePageChange(currentPage - 1)} disabled={currentPage === 1}>
+            {'<'}
+          </PageButton>
+          {pageNumbers.map((page) => (
+            <PageButton key={page} onClick={() => handlePageChange(page)} active={page === currentPage}>
+              {page}
+            </PageButton>
+          ))}
+          <PageButton onClick={() => handlePageChange(currentPage + 1)} disabled={currentPage === totalPages}>
+            {'>'}
+          </PageButton>
+          <PageButton onClick={() => handlePageChange(totalPages)} disabled={currentPage === totalPages}>
+            {'>>'}
+          </PageButton>
+        </PaginationContainer>
+      )}
+    </SearchPageContainer>
+  );
 };
 
 export default DetailSearchPage;

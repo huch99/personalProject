@@ -161,6 +161,7 @@ const HomePage = () => {
     content = <S_LoadingText>입찰 정보를 불러오는 중입니다...</S_LoadingText>;
   } else if (status === 'succeeded') {
     if (bids.length > 0) {
+      console.log(bids);
       content = (
         <S_BidGrid>
           {bids.map((bid) => (

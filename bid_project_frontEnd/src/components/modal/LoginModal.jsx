@@ -146,12 +146,12 @@ const LoginModal = ({ isOpen, onClose }) => {
       // 3. 백엔드 응답 처리
       const data = await response.json(); // 백엔드 응답이 JSON 형식이라고 가정
 
-      if (response.ok && data.accessToken) { // HTTP 상태 코드가 200번대인 경우 (예: 200 OK)
-        console.log('로그인 성공:', data);
-        dispatch(loginSuccess({ // ✅ loginSuccess 액션 디스패치
+      if (response.ok && data.accessToken) {
+        dispatch(loginSuccess({
           accessToken: data.accessToken,
           username: data.username,
-          userId: data.userId
+          userId: data.userId,
+          email: data.email
         }));
         onClose();
       } else {

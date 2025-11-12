@@ -1,4 +1,6 @@
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
+import { FaStar } from 'react-icons/fa';
+import { useDispatch, useSelector } from 'react-redux';
 import { useNavigate, useParams } from 'react-router-dom';
 import styled from 'styled-components';
 
@@ -95,103 +97,136 @@ const ErrorMessage = styled.p`
   margin-top: 50px;
 `;
 
+const FavoriteIcon = styled.div`
+  position: absolute;
+  top: 30px;
+  right: 30px;
+  cursor: pointer;
+  color: ${props => props.isFavorite ? '#FFD700' : '#cccccc'}; // 노란색 or 회색
+  font-size: 32px; // 목록보다 크게
+  transition: transform 0.2s ease;
+
+  &:hover {
+    transform: scale(1.1);
+  }
+`;
+
 const TenderDetailPage = () => {
-    const { cltrMnmtNo } = useParams(); // URL 파라미터에서 tenderId를 가져옴
-    const navigate = useNavigate();
+  const { cltrMnmtNo } = useParams(); // URL 파라미터에서 tenderId를 가져옴
+  const navigate = useNavigate();
+  const dispatch = useDispatch();
+  const favoriteTenderIds = useSelector(state => state.tenders.favoriteTenderIds);
 
-    const [tenderDetail, setTenderDetail] = useState(null);
-    const [loading, setLoading] = useState(true);
-    const [error, setError] = useState(null);
+  const [tenderDetail, setTenderDetail] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
 
-    useEffect(() => {        
-        const fetchTenderDetail = async () => {
-            try {
-                setLoading(true);
-                
-                const response = await fetch(`http://localhost:8080/api/tenders/${cltrMnmtNo}`);
+  const isCurrentTenderFavorite = favoriteTenderIds.includes(cltrMnmtNo);
 
-                if (!response.ok) {
-                    const errorText = await response.text();
-                    throw new Error(`HTTP error! status: ${response.status} - ${errorText}`);
-                }
+  useEffect(() => {
+    const fetchTenderDetail = async () => {
+      try {
+        setLoading(true);
+        setError(null);
 
-                const data = await response.json();
-                setTenderDetail(data); // 백엔드에서 받은 TenderResponseDTO 데이터를 설정
-            } catch (err) {
-                setError(err.message || '물건 상세 정보를 불러오는데 실패했습니다.');
-                console.error("Failed to fetch tender detail:", err);
-            } finally {
-                setLoading(false);
-            }
-        };
+        const response = await fetch(`http://localhost:8080/api/tenders/${cltrMnmtNo}`);
 
-        if (cltrMnmtNo) {
-            fetchTenderDetail();
+        if (!response.ok) {
+          const errorText = await response.text();
+          throw new Error(`HTTP error! status: ${response.status} - ${errorText}`);
         }
-    }, [cltrMnmtNo]); // tenderId가 변경될 때마다 데이터를 다시 불러옴
 
-    if (loading) return <LoadingMessage>상세 정보 로딩 중...</LoadingMessage>;
-    if (error) return <ErrorMessage>오류: {error}</ErrorMessage>;
-    if (!tenderDetail) return <ErrorMessage>물건 정보를 찾을 수 없습니다.</ErrorMessage>;
-
-    // 날짜/시간 포맷팅 헬퍼 함수
-    const formatDateTime = (dt) => {
-        if (!dt) return 'N/A';
-        try {
-            const date = new Date(dt); // 백엔드에서 LocalDateTime이 문자열로 오면 Date 객체로 변환
-            return date.toLocaleString();
-        } catch (e) {
-            return dt; // 파싱 실패 시 원본 문자열 반환
-        }
+        const data = await response.json();
+        setTenderDetail(data); // 백엔드에서 받은 TenderResponseDTO 데이터를 설정
+      } catch (err) {
+        setError(err.message || '물건 상세 정보를 불러오는데 실패했습니다.');
+        console.error("Failed to fetch tender detail:", err);
+      } finally {
+        setLoading(false);
+      }
     };
 
+    if (cltrMnmtNo) {
+      fetchTenderDetail();
+      dispatch(checkSingleFavoriteStatus(cltrMnmtNo));
+    }
+  }, [cltrMnmtNo, dispatch]);
 
-    return (
-        <DetailPageContainer>
-            <DetailTitle>{tenderDetail.tenderTitle}</DetailTitle>
+  // ✅ 즐겨찾기 토글 핸들러
+  const handleToggleFavorite = useCallback(() => {
+    dispatch(toggleFavorite({ cltrMnmtNo: cltrMnmtNo, isFavorite: isCurrentTenderFavorite }));
+  }, [dispatch, cltrMnmtNo, isCurrentTenderFavorite]);
 
-            <DetailSection>
-                <DetailLabel>공고번호:</DetailLabel>
-                <DetailValue>{tenderDetail.pbctNo}</DetailValue>
-            </DetailSection>
 
-            <DetailSection>
-                <DetailLabel>물건관리번호:</DetailLabel>
-                <DetailValue>{tenderDetail.cltrMnmtNo}</DetailValue>
-            </DetailSection>
+  if (loading) return <LoadingMessage>상세 정보 로딩 중...</LoadingMessage>;
+  if (error) return <ErrorMessage>오류: {error}</ErrorMessage>;
+  if (!tenderDetail) return <ErrorMessage>물건 정보를 찾을 수 없습니다.</ErrorMessage>;
 
-            <DetailSection>
-                <DetailLabel>처분방식:</DetailLabel>
-                <DetailValue>{tenderDetail.organization}</DetailValue>
-            </DetailSection>
+  // 날짜/시간 포맷팅 헬퍼 함수
+  const formatDateTime = (dt) => {
+    if (!dt) return 'N/A';
+    try {
+      const date = new Date(dt); // 백엔드에서 LocalDateTime이 문자열로 오면 Date 객체로 변환
+      return date.toLocaleString();
+    } catch (e) {
+      return dt; // 파싱 실패 시 원본 문자열 반환
+    }
+  };
 
-            <DetailSection>
-                <DetailLabel>입찰번호:</DetailLabel>
-                <DetailValue>{tenderDetail.bidNumber}</DetailValue>
-            </DetailSection>
 
-            <DetailSection>
-                <DetailLabel>공고일:</DetailLabel>
-                <DetailValue>{formatDateTime(tenderDetail.announcementDate)}</DetailValue>
-            </DetailSection>
+  return (
+    <DetailPageContainer>
+      <DetailTitle>{tenderDetail.tenderTitle}</DetailTitle>
 
-            <DetailSection>
-                <DetailLabel>입찰 마감일:</DetailLabel>
-                <DetailValue>{formatDateTime(tenderDetail.deadline)}</DetailValue>
-            </DetailSection>
+      <FavoriteIcon 
+        isFavorite={isCurrentTenderFavorite} 
+        onClick={handleToggleFavorite}
+      >
+        <FaStar />
+      </FavoriteIcon>
 
-            {/* 백엔드에서 GOODS_NM 필드를 가져와야 합니다. */}
-            {/* 현재 TenderResponseDTO에 GOODS_NM은 없으므로, 백엔드에서 이 필드를 추가하고 파싱해야 함 */}
-            {/* {tenderDetail.goodsName && ( // goodsName이라는 필드가 있다고 가정
+      <DetailSection>
+        <DetailLabel>공고번호:</DetailLabel>
+        <DetailValue>{tenderDetail.pbctNo}</DetailValue>
+      </DetailSection>
+
+      <DetailSection>
+        <DetailLabel>물건관리번호:</DetailLabel>
+        <DetailValue>{tenderDetail.cltrMnmtNo}</DetailValue>
+      </DetailSection>
+
+      <DetailSection>
+        <DetailLabel>처분방식:</DetailLabel>
+        <DetailValue>{tenderDetail.organization}</DetailValue>
+      </DetailSection>
+
+      <DetailSection>
+        <DetailLabel>입찰번호:</DetailLabel>
+        <DetailValue>{tenderDetail.bidNumber}</DetailValue>
+      </DetailSection>
+
+      <DetailSection>
+        <DetailLabel>공고일:</DetailLabel>
+        <DetailValue>{formatDateTime(tenderDetail.announcementDate)}</DetailValue>
+      </DetailSection>
+
+      <DetailSection>
+        <DetailLabel>입찰 마감일:</DetailLabel>
+        <DetailValue>{formatDateTime(tenderDetail.deadline)}</DetailValue>
+      </DetailSection>
+
+      {/* 백엔드에서 GOODS_NM 필드를 가져와야 합니다. */}
+      {/* 현재 TenderResponseDTO에 GOODS_NM은 없으므로, 백엔드에서 이 필드를 추가하고 파싱해야 함 */}
+      {/* {tenderDetail.goodsName && ( // goodsName이라는 필드가 있다고 가정
                 <GoodsDescription>
                     <h3>물건 상세 설명</h3>
                     <p>{tenderDetail.goodsName}</p>
                 </GoodsDescription>
             )} */}
 
-            <BackButton onClick={() => navigate(-1)}>뒤로 가기</BackButton>
-        </DetailPageContainer>
-    );
+      <BackButton onClick={() => navigate(-1)}>뒤로 가기</BackButton>
+    </DetailPageContainer>
+  );
 };
 
 export default TenderDetailPage;

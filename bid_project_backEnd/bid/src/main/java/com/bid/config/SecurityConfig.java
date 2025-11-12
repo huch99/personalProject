@@ -2,11 +2,13 @@ package com.bid.config;
 
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.http.HttpMethod;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.ProviderManager;
 import org.springframework.security.authentication.dao.DaoAuthenticationProvider;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
+import org.springframework.security.config.annotation.web.configurers.AbstractHttpConfigurer;
 import org.springframework.security.config.http.SessionCreationPolicy;
 import org.springframework.security.core.userdetails.UserDetailsService;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
@@ -45,12 +47,17 @@ public class SecurityConfig {
 
 	@Bean
 	public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
-		http.csrf(csrf -> csrf.disable()) // CSRF 보호 기능을 비활성화합니다.
-				.sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS) 
-				).authorizeHttpRequests(authorize -> authorize.requestMatchers("/api/**", "/login", "/signup", "/faq")
-						.permitAll().anyRequest().authenticated());
-
-		http.addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class); // 예시
+		http.cors(cors -> {
+		}).csrf(AbstractHttpConfigurer::disable) // CSRF 비활성화는 그대로 유지
+				.sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
+				.authorizeHttpRequests(authorize -> authorize.requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
+						.requestMatchers(HttpMethod.GET, "/api/tenders").permitAll()
+						.requestMatchers(HttpMethod.GET, "/api/tenders/search").permitAll()
+						.requestMatchers(HttpMethod.GET, "/api/tenders/{cltrMnmtNo}").permitAll()
+						.requestMatchers("/api/login/**", "/api/signup/**").permitAll()
+						.requestMatchers("/api/favorites/**").authenticated().requestMatchers("/api/**").authenticated()
+						.anyRequest().authenticated())
+				.addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class);
 
 		return http.build();
 	}

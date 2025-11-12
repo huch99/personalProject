@@ -28,11 +28,7 @@ public class TenderController {
 
 	private final TenderService tenderService;
 	
-	/**
-     * 모든 입찰 정보를 조회하는 API
-     * GET /api/tenders
-     */
-	@GetMapping // /api/tenders
+	@GetMapping
     public ResponseEntity<PagedTenderResponse> getAllTenders(
             @RequestParam(name ="pageNo", defaultValue = "1") int pageNo) {    // ✅ numOfRows 파라미터 추가 (기본값 10)
 		try {
@@ -65,31 +61,34 @@ public class TenderController {
     
     @GetMapping("/search")
     public ResponseEntity<PagedTenderResponse> searchTenders(
-            @RequestParam(name = "cltrNm", required = false) String cltrNm,             // 물건명
-            @RequestParam(name = "dpslMtdCd",required = false) String dpslMtdCd,          // 처분방식코드 (0001 매각, 0002 임대)
-            @RequestParam(name = "sido",required = false) String sido,               // 물건소재지 (시도)
-            @RequestParam(name = "sgk",required = false) String sgk,                // 물건소재지 (시군구)
-            @RequestParam(name = "emd",required = false) String emd,                // 물건소재지 (읍면동)
-            @RequestParam(name = "goodsPriceFrom",required = false) String goodsPriceFrom,     // 감정가하한
-            @RequestParam(name = "goodsPriceTo",required = false) String goodsPriceTo,       // 감정가상한
-            @RequestParam(name = "openPriceFrom",required = false) String openPriceFrom,      // 최저입찰가하한
-            @RequestParam(name = "openPriceTo",required = false) String openPriceTo,        // 최저입찰가상한
-            @RequestParam(name = "pbctBegnDtm",required = false) String pbctBegnDtm,        // 입찰일자 From (YYYYMMDD)
-            @RequestParam(name = "pbctClsDtm",required = false) String pbctClsDtm,         // 입찰일자 To (YYYYMMDD)
-            @RequestParam(name = "pageNo", defaultValue = "1") int pageNo,              // 페이지 번호
-            @RequestParam(name = "numOfRows", defaultValue = "100") int numOfRows          // 페이지당 데이터 개수 (충분히 크게)
-    ) {
-        // 서비스 메서드 호출
-    	PagedTenderResponse pagedResponse  = tenderService.searchTenders(
-                cltrNm, dpslMtdCd, sido, sgk, emd,
-                goodsPriceFrom, goodsPriceTo, openPriceFrom, openPriceTo,
-                pbctBegnDtm, pbctClsDtm,
-                pageNo, numOfRows
-        );
+            @RequestParam(name = "cltrNm", required = false) String cltrNm,
+            @RequestParam(name = "dpslMtdCd", required = false) String dpslMtdNm, // 엔티티 organization 필드와 매핑
+            @RequestParam(name = "sido", required = false) String sido,
+            @RequestParam(name = "sgk", required = false) String sgk,
+            @RequestParam(name = "emd", required = false) String emd,
+            @RequestParam(name = "goodsPriceFrom", required = false) String goodsPriceFrom,
+            @RequestParam(name = "goodsPriceTo", required = false) String goodsPriceTo,
+            @RequestParam(name = "openPriceFrom", required = false) String openPriceFrom, // 현재 DB 엔티티에 매핑되는 필드 없음 (향후 확장용)
+            @RequestParam(name = "openPriceTo", required = false) String openPriceTo,   // 현재 DB 엔티티에 매핑되는 필드 없음 (향후 확장용)
+            @RequestParam(name = "pbctBegnDtm", required = false) String pbctBegnDtm,   // String으로 받아서 서비스에서 파싱
+            @RequestParam(name = "pbctClsDtm", required = false) String pbctClsDtm,    // String으로 받아서 서비스에서 파싱
+            @RequestParam(name = "pageNo", defaultValue = "1") int pageNo,
+            @RequestParam(name = "numOfRows", defaultValue = "10") int numOfRows) {
 
-        if (pagedResponse.getTenders().isEmpty()) {
-            return ResponseEntity.noContent().build();
+        log.info("Request for search tenders with cltrNm: {}, dpslMtdCd: {}, pageNo: {}, numOfRows: {}",
+                cltrNm, dpslMtdNm, pageNo, numOfRows);
+        try {
+            PagedTenderResponse tenders = tenderService.searchTenders(
+                    cltrNm, dpslMtdNm, sido, sgk, emd,
+                    goodsPriceFrom, goodsPriceTo, openPriceFrom, openPriceTo,
+                    pbctBegnDtm, pbctClsDtm,
+                    pageNo, numOfRows
+            );
+            log.info("Successfully fetched search tenders. Total count: {}", tenders.getTotalCount());
+            return ResponseEntity.ok(tenders);
+        } catch (Exception e) {
+            log.error("Error searching tenders: {}", e.getMessage(), e);
+            return ResponseEntity.status(500).build();
         }
-        return ResponseEntity.ok(pagedResponse );
     }
 }

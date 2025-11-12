@@ -9,6 +9,7 @@ import FaqWrite from "./pages/faqPages/FaqWrite"
 import FaqEdit from "./pages/faqPages/FaqEdit"
 import DetailSearchPage from "./pages/DetailSearchPage"
 import TenderDetailPage from "./pages/tenderPages/TenderDetailPage"
+import MyPage from "./pages/myPages/MyPage"
 
 
 function App() {
@@ -18,6 +19,9 @@ function App() {
         <Routes>
           {/* 홈페이지 루트 */}
           <Route path="/" element={<Layout><HomePage /></Layout>} />
+
+          {/* 마이페이지 루트 */}
+          <Route path="/mypage" element={<Layout><MyPage /></Layout>} />
 
           {/* 상세 검색 페이지 루트 */}
           <Route path="/search" element={<Layout><DetailSearchPage /></Layout>}/>
