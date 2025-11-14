@@ -7,6 +7,7 @@ import java.util.stream.Collectors;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import com.bid.dto.response.TenderResponseDTO;
 import com.bid.entity.Favorite;
 import com.bid.entity.Tender;
 import com.bid.entity.User;
@@ -83,11 +84,12 @@ public class FavoriteService {
     }
 
     // 특정 사용자의 모든 즐겨찾기 목록 조회
-    public List<Tender> getFavoriteTendersByUserId(Long userId) {
+    public List<TenderResponseDTO> getFavoriteTendersByUserId(Long userId) {
         User user = userRepository.findById(userId)
                 .orElseThrow(() -> new ResourceNotFoundException("User not found with id: " + userId));
         return favoriteRepository.findByUser(user).stream()
                 .map(Favorite::getTender)
+                .map(TenderResponseDTO::fromEntity)
                 .collect(Collectors.toList());
     }
 }

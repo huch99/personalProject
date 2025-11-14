@@ -200,13 +200,4 @@ public class TenderService {
         }
     }
 
-	
-
-//	@Getter
-//	@Setter
-//	@AllArgsConstructor
-//	private static class TenderListResult {
-//		private List<TenderResponseDTO> tenders;
-//		private int totalCount;
-//	}
 }

@@ -168,16 +168,16 @@ const HomePage = () => {
             <S_BidItemCard key={bid.cltrMnmtNo} to={`/tenders/${bid.cltrMnmtNo}`}>
               <S_BidTitle>{bid.tenderTitle}</S_BidTitle>
               <S_BidMeta>
-                <strong>마감일 : </strong> {bid.deadline ? new Date(bid.deadline).toLocaleString() : 'N/A'}
+                <strong>공고 번호 : </strong> {bid.cltrMnmtNo}
               </S_BidMeta>
               <S_BidMeta>
                 <strong>처분 방식 : </strong> {bid.organization}
-              </S_BidMeta>
-              <S_BidMeta>
-                <strong>공고 번호 : </strong> {bid.pbctNo}
-              </S_BidMeta>
+              </S_BidMeta>              
               <S_BidMeta>
                 <strong>공고일 : </strong> {bid.announcementDate ? new Date(bid.announcementDate).toLocaleString() : 'N/A'}
+              </S_BidMeta>
+              <S_BidMeta>
+                <strong>마감일 : </strong> {bid.deadline ? new Date(bid.deadline).toLocaleString() : 'N/A'}
               </S_BidMeta>
             </S_BidItemCard>
           ))}

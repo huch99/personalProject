@@ -62,7 +62,7 @@ export const fetchFavoriteTenderIds = createAsyncThunk(
             const token = localStorage.getItem('accessToken');
             const response = await fetch('http://localhost:8080/api/favorites', {
                 headers: {
-                    'Authorization': `Bearer ${token}` // ✅ Authorization 헤더 직접 설정
+                    'Authorization': `Bearer ${token}`
                 }
             });
             

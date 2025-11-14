@@ -26,7 +26,7 @@ public class BidApplication {
 	        ThreadPoolTaskExecutor executor = new ThreadPoolTaskExecutor();
 	        executor.setCorePoolSize(5);   // ✅ 동시에 실행될 스레드의 수 (API 호출 병렬성) - 적절히 조절
 	        executor.setMaxPoolSize(10);   // 최대 스레드 수
-	        executor.setQueueCapacity(50); // 큐 용량
+	        executor.setQueueCapacity(1000); // 큐 용량
 	        executor.setThreadNamePrefix("OnbidApi-");
 	        executor.initialize();
 	        return executor;

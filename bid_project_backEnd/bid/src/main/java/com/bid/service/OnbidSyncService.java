@@ -71,7 +71,6 @@ public class OnbidSyncService implements ApplicationRunner {
 	@Override
 	public void run(ApplicationArguments args) throws Exception {
 		log.info("Application started. Initiating initial Onbid Tender synchronization...");
-		isSyncing = true;
 		// ✅ 첫 동기화는 빠르게 필수 데이터만 가져옵니다.
 		performFastSync();
 		log.info("Initial fast Onbid Tender synchronization completed. Full sync will run in background.");
@@ -123,6 +122,9 @@ public class OnbidSyncService implements ApplicationRunner {
 			ResponseEntity<String> initialResponseEntity = restTemplate
 					.getForEntity(initialUriBuilder.encode().build().toUri(), String.class);
 			if (initialResponseEntity.getStatusCode().is2xxSuccessful() && initialResponseEntity.getBody() != null) {
+				String xmlResponse = initialResponseEntity.getBody();
+			    log.info(">>>> Raw XML Response from Onbid API (initial): {}", xmlResponse);
+				
 				OnbidApiParser.TenderListResult initialParsedResult = onbidApiParser
 						.parseXmlToTenderDtosAndCount(initialResponseEntity.getBody());
 				totalCount = initialParsedResult.getTotalCount();
@@ -180,6 +182,8 @@ public class OnbidSyncService implements ApplicationRunner {
 	}
 
 	private List<TenderResponseDTO> fetchOnbidDataForSinglePage(int page) {
+		log.info(">>>> Started fetching page {} at {}", page, LocalDateTime.now());
+		
 		List<TenderResponseDTO> pageTenders = new ArrayList<>();
 		UriComponentsBuilder uriBuilder = UriComponentsBuilder.fromUriString(onbidApiBaseUrl)
 				.queryParam("serviceKey", onbidApiServiceKey).queryParam("pageNo", page)
@@ -201,7 +205,9 @@ public class OnbidSyncService implements ApplicationRunner {
 		} catch (Exception e) {
 			log.error("Error fetching Onbid API data from page {}: {}", page, e.getMessage(), e);
 		}
-		return pageTenders;
+		log.info("<<<< Finished fetching page {} at {}", page, LocalDateTime.now());
+		
+		return pageTenders;		
 	}
 
 	private List<TenderResponseDTO> fetchOnbidDataPages(int startPage, int endPage) {

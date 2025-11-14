@@ -2,6 +2,8 @@ package com.bid.entity;
 
 import java.time.LocalDateTime;
 
+import com.bid.dto.response.TenderResponseDTO;
+
 import jakarta.persistence.*;
 import lombok.*;
 
@@ -25,7 +27,7 @@ public class Tender {
 
     private Long tenderId;       // 입찰 고유 ID (PLNM_NO)
     private Long pbctNo;         // 공매번호 (PBCT_NO)
-    private String cltrHstrNo;   // CLTR_HSTR_NO
+    private String cltrHstrNo; 	// CLTR_HSTR_NO
     private String tenderTitle;  // 입찰 공고 제목 (CLTR_NM)
     private String organization; // 처분방식명 (DPSL_MTD_NM)
     private String bidNumber;    // 입찰 공고 번호 (BID_MNMT_NO)
@@ -36,13 +38,16 @@ public class Tender {
     
     private LocalDateTime announcementDate; // 공고일 (PBCT_BEGN_DTM)
     private LocalDateTime deadline;       // 입찰 마감일 (PBCT_CLS_DTM)
+    
+    private Long initialOpenPriceFrom;
+    private Long initialOpenPriceTo;
 
     // 추가 메타데이터 (데이터 동기화 관리를 위해)
     private LocalDateTime lastSyncedAt; // 이 레코드가 온비드와 마지막으로 동기화된 시간
     private boolean active; // 현재 활성 상태인지 여부 (예: 기간 만료/삭제된 공고 처리)
 
     // TenderResponseDTO에서 Tender 엔티티로 변환하는 팩토리 메서드 (선택 사항, Mapper로 대체 가능)
-    public static Tender fromDto(com.bid.dto.response.TenderResponseDTO dto) {
+    public static Tender fromDto(TenderResponseDTO dto) {
         return Tender.builder()
                 .tenderId(dto.getTenderId())
                 .pbctNo(dto.getPbctNo())
@@ -58,6 +63,8 @@ public class Tender {
                 .apslAsesAvgAmt(dto.getApslAsesAvgAmt())
                 .lastSyncedAt(LocalDateTime.now()) // 생성 시점 기록
                 .active(true) // 기본적으로 활성 상태로 생성
+                .initialOpenPriceFrom(dto.getOpenPriceFrom())
+                .initialOpenPriceTo(dto.getOpenPriceTo())
                 .build();
     }
 }

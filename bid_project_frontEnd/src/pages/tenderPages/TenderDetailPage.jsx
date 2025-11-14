@@ -3,6 +3,7 @@ import { FaStar } from 'react-icons/fa';
 import { useDispatch, useSelector } from 'react-redux';
 import { useNavigate, useParams } from 'react-router-dom';
 import styled from 'styled-components';
+import { checkSingleFavoriteStatus } from '../../features/tenders/tenderSlicce';
 
 const DetailPageContainer = styled.div`
   max-width: 900px;
@@ -11,6 +12,7 @@ const DetailPageContainer = styled.div`
   background-color: #fff;
   border-radius: 12px;
   box-shadow: 0 6px 18px rgba(0, 0, 0, 0.1);
+  position: relative;
 `;
 
 const DetailTitle = styled.h2`
@@ -99,8 +101,8 @@ const ErrorMessage = styled.p`
 
 const FavoriteIcon = styled.div`
   position: absolute;
-  top: 30px;
-  right: 30px;
+  top: 10px;
+  right: 10px;
   cursor: pointer;
   color: ${props => props.isFavorite ? '#FFD700' : '#cccccc'}; // 노란색 or 회색
   font-size: 32px; // 목록보다 크게

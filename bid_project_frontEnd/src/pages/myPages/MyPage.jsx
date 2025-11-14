@@ -7,6 +7,7 @@ import EmailEditModal from '../../components/modal/EmailEditModal';
 import PasswordChangeModal from '../../components/modal/PasswordChangeModal';
 import { fetchFavoriteTenderIds, toggleFavorite } from '../../features/tenders/tenderSlicce';
 import axios from 'axios';
+import { FaStar } from 'react-icons/fa';
 
 const MyPageContainer = styled.div`
   max-width: 800px;
@@ -120,12 +121,12 @@ const SuccessMessage = styled.p`
   margin-left: auto;
 `;
 
-const InterestList = styled.ul`
+const FavoriteList = styled.ul`
   list-style: none;
   padding: 0;
 `;
 
-const InterestItem = styled.li`
+const FavoriteItem = styled.li`
   background-color: #e6f7ff;
   border: 1px solid #91d5ff;
   border-radius: 6px;
@@ -136,6 +137,7 @@ const InterestItem = styled.li`
   align-items: center;
   font-size: 15px;
   color: #333;
+  position: relative;
 
   &:last-child {
     margin-bottom: 0;
@@ -165,8 +167,8 @@ const ProfileEditButtonGroup = styled.div`
 
 const FavoriteIcon = styled.div`
   position: absolute;
-  top: 15px;
-  right: 15px;
+  top: 5px;
+  right: 5px;
   cursor: pointer;
   color: #FFD700; // 마이페이지에서는 이미 즐겨찾기 된 것이므로 항상 노란색
   font-size: 24px;
@@ -222,10 +224,30 @@ const MyPage = () => {
       setLoadingFavoriteDetails(true);
       setErrorFavoriteDetails(null);
       try {
-        // 백엔드 API에서 즐겨찾기한 입찰 공고 상세 목록을 직접 가져옵니다.
-        // 이 API는 `List<Tender>`를 반환하도록 FavoriteController에 구현했습니다.
-        const response = await axios.get('http://localhost:8080/api/favorites');
-        setFavoriteTendersDetail(response.data);
+        const token = localStorage.getItem('accessToken');
+
+        if (!token) {
+          // 토큰이 없으면 로그인 페이지로 리다이렉트하거나 에러 처리
+          console.warn("No access token found. Cannot fetch favorite details.");
+          setErrorFavoriteDetails("로그인이 필요합니다.");
+          setLoadingFavoriteDetails(false);
+          return;
+        }
+
+        const response = await fetch('http://localhost:8080/api/favorites', {
+          headers: {
+            'Authorization': `Bearer ${token}` // 🌟 Authorization 헤더 추가
+          }
+        });
+
+        if (!response.ok) {
+          // HTTP 상태 코드가 2xx가 아닐 경우 에러 처리
+          const errorBody = await response.text(); // 에러 메시지 확인을 위해 텍스트로 받기
+          console.error(`HTTP error! status: ${response.status}, message: ${errorBody}`);
+          throw new Error(`관심 입찰 정보를 불러오는 데 실패했습니다: ${response.status}`);
+        }
+        const data = await response.json(); // 응답 데이터를 JSON으로 파싱
+        setFavoriteTendersDetail(data);
       } catch (err) {
         console.error("Error fetching favorite tenders details:", err);
         setErrorFavoriteDetails("관심 입찰 상세 정보를 불러오는 데 실패했습니다.");

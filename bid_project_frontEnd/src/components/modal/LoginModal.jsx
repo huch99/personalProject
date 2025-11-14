@@ -147,13 +147,17 @@ const LoginModal = ({ isOpen, onClose }) => {
       const data = await response.json(); // 백엔드 응답이 JSON 형식이라고 가정
 
       if (response.ok && data.accessToken) {
+        console.log("로그인 성공! 받은 Access Token:", data.accessToken);
         dispatch(loginSuccess({
           accessToken: data.accessToken,
           username: data.username,
           userId: data.userId,
           email: data.email
         }));
+
         onClose();
+
+        window.location.reload();
       } else {
         console.error('로그인 실패 응답:', data);
         setErrorMessage(data.message || '아이디 또는 비밀번호가 올바르지 않습니다.');

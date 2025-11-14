@@ -16,6 +16,7 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
+import com.bid.dto.response.TenderResponseDTO;
 import com.bid.entity.Tender;
 import com.bid.security.CustomUserDetails;
 import com.bid.service.FavoriteService;
@@ -100,9 +101,9 @@ public class FavoriteController {
 
 	// 현재 사용자의 즐겨찾기 목록 조회
 	@GetMapping
-	public ResponseEntity<List<Tender>> getMyFavorites() {
+	public ResponseEntity<List<TenderResponseDTO>> getMyFavorites() {
 		Long userId = getCurrentUserId();
-		List<Tender> favoriteTenders = favoriteService.getFavoriteTendersByUserId(userId);
+		List<TenderResponseDTO> favoriteTenders = favoriteService.getFavoriteTendersByUserId(userId);
 		return ResponseEntity.ok(favoriteTenders);
 	}
 }
