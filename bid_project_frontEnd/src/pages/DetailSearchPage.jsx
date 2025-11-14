@@ -168,7 +168,7 @@ const ResultItem = styled.div`
 
 const StatusTag = styled.span`
   position: absolute;
-  top: 15px;
+  bottom: 15px;
   right: 15px;
   padding: 3px 8px;
   border-radius: 5px;

@@ -116,7 +116,7 @@ public class OnbidSyncService implements ApplicationRunner {
 
 		UriComponentsBuilder initialUriBuilder = UriComponentsBuilder.fromUriString(onbidApiBaseUrl)
 				.queryParam("serviceKey", onbidApiServiceKey).queryParam("pageNo", 1)
-				.queryParam("numOfRows", MAX_ONBID_API_NUM_OF_ROWS);
+				.queryParam("numOfRows", 10000);
 
 		try {
 			ResponseEntity<String> initialResponseEntity = restTemplate
@@ -128,9 +128,9 @@ public class OnbidSyncService implements ApplicationRunner {
 				OnbidApiParser.TenderListResult initialParsedResult = onbidApiParser
 						.parseXmlToTenderDtosAndCount(initialResponseEntity.getBody());
 				totalCount = initialParsedResult.getTotalCount();
-				totalPages = (int) Math.ceil((double) totalCount / MAX_ONBID_API_NUM_OF_ROWS);
+				totalPages = (int) Math.ceil((double) totalCount / 10000);
 				log.info("Onbid API Total Count: {}. Calculated Total Pages: {} (based on {} rows/page)", totalCount,
-						totalPages, MAX_ONBID_API_NUM_OF_ROWS);
+						totalPages, 10000);
 			} else {
 				log.error("Failed to get initial totalCount from Onbid API. HTTP Status: {}",
 						initialResponseEntity.getStatusCode());
@@ -187,7 +187,7 @@ public class OnbidSyncService implements ApplicationRunner {
 		List<TenderResponseDTO> pageTenders = new ArrayList<>();
 		UriComponentsBuilder uriBuilder = UriComponentsBuilder.fromUriString(onbidApiBaseUrl)
 				.queryParam("serviceKey", onbidApiServiceKey).queryParam("pageNo", page)
-				.queryParam("numOfRows", MAX_ONBID_API_NUM_OF_ROWS);
+				.queryParam("numOfRows", 10000);
 
 		URI uri = uriBuilder.encode().build().toUri();
 		log.debug("Fetching Onbid API data for single page {}: {}", page, uri);
